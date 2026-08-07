@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 
 const adminEmail = () => (process.env.ADMIN_EMAIL ?? "knutesteel@gmail.com").toLowerCase();
@@ -22,9 +23,11 @@ export async function login(formData: FormData) {
 export async function createAdmin(formData: FormData) {
   const supabase = await createClient();
   const values = credentials(formData);
+  const requestHeaders = await headers();
+  const origin = requestHeaders.get("origin") ?? "http://localhost:3000";
   const { error } = await supabase.auth.signUp({
     ...values,
-    options: { emailRedirectTo: `${String(formData.get("origin") ?? "")}/auth/callback` },
+    options: { emailRedirectTo: `${origin}/auth/callback` },
   });
   if (error) redirect(`/login?error=${encodeURIComponent(error.message)}`);
   redirect("/login?created=1");

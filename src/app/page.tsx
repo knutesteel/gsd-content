@@ -1,4 +1,7 @@
 import styles from "./page.module.css";
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
+import { logout } from "./login/actions";
 
 const milestones = [
   { label: "Foundation", detail: "Next.js, schema, security, and environment contract", state: "Active" },
@@ -16,7 +19,9 @@ const capabilities = [
   "CSV export without operational spreadsheet sync",
 ];
 
-export default function Home() {
+export default async function Home() {
+  const supabase = await createClient();
+  const { count } = await supabase.from("content_items").select("id", { count: "exact", head: true });
   return (
     <main className={styles.shell}>
       <section className={styles.hero}>
@@ -25,7 +30,8 @@ export default function Home() {
         <p className={styles.lede}>
           The new content operating system is being built on PostgreSQL while preserving the workflows that already run the Hank and the Squirrel brand.
         </p>
-        <div className={styles.status}><span /> Milestone 1 in progress</div>
+        <div className={styles.actions}><Link href="/migration">Open Reconciliation Tool</Link><form action={logout}><button>Sign Out</button></form></div>
+        <div className={styles.status}><span /> Supabase connected · {count ?? 0} content records</div>
       </section>
 
       <section className={styles.grid} aria-label="Migration milestones">

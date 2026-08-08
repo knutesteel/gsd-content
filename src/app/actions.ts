@@ -222,28 +222,42 @@ export async function generateContent(form: FormData) {
 - Describe what is visibly happening in plain language. For example: "A clown sits with his hands behind him on a chair as a turtle walks up to a table of pies." Do not append phrases such as "without showing harm," "indicates the alleged incident," "avoid distress," or similar disclaimers unless a specific detail would otherwise require graphic gore or explicit injury.
 - Use the stored Library guidelines to inform the concept, but do not repeat character descriptions, appearance rules, wardrobe, palette, props, or drawing-style instructions in generation_prompt.
 - Output is for the V2 app. Do not include Google Sheet instructions, CSV rows, filenames, claims that you cannot access tools, or offers to do more work.
-- Use no more than four hashtags and place them immediately before the CTA in the content.`;
+- If hashtags are useful, use no more than four in the caption. Do not put hashtags or CTA copy in Content or generation_prompt.`;
     const outputContract = `OUTPUT CONTRACT — NON-NEGOTIABLE
 - Overview must contain exactly two short paragraphs separated by a blank line. Paragraph 1 is a factual 1–2 sentence overview of the news article. Paragraph 2 is a 1–2 sentence GSD take explaining Hank and the squirrel's comedic/productivity angle.
 - Choose content_type as either "Single Image" or "Carousel".
 - Set panel_count to the exact number of visual panels. Use 1 for a single image.
 - Score the idea from 0–100 based on GSD brand fit, comedic potential, usefulness, and visual clarity.
-- Caption must be finished, publish-ready Instagram copy for the post—not a summary, inventory, or description of the image. It should deliver the joke or observation in the GSD voice, connect it to the article or workplace/productivity angle, and end with an engaging CTA when appropriate. Do not begin with "This image shows" or narrate the composition.
+- Caption must be finished, publish-ready Instagram copy—not an image summary. Include the source article URL, then a concise audience question or CTA tied to the workplace issue. Do not narrate the composition or repeat the panel dialogue.
+- Content is the complete creative blueprint and must use this exact V1-style structure:
+  Setting: [one overall location for the full post]
+
+  Panel 1 — [short beat title]
+  Action: [plain, literal description of what happens in this panel]
+  Hank: “[exact dialogue]”
+  the squirrel: “[exact dialogue]”
+
+  Repeat the Panel / Action / speaker lines for every panel. Include only speakers who appear. For a single image, use "Panel 1" and the same structure.
+- Keep actions direct and concrete. For example, show the person seated with hands behind them while another character approaches a table of pies; do not replace the action with symbols, an empty chair, euphemisms, or safety commentary.
 - The generation_prompt must begin with this exact sentence: "Use the Library documents, GSD image, VOICE, and ICP, etc to create the requested images"
-- After that opening sentence, format every requested image as its own clean block using exactly these line labels, with a blank line between image blocks:
-  Image #: [sequential number]
-  Setting: [where the scene takes place and only the objects or environmental details needed for the scene]
-  Interactions: [what the characters are doing and how they are reacting to one another]
-  Conversation: [the exact speech or thought text, with each speaker clearly identified; write "None" when there is no dialogue]
-- Do not combine those labels into paragraphs or use "Panel" as a substitute for "Image".
+- After that opening sentence and one blank line, generation_prompt must reproduce the complete Content blueprint verbatim: the single overall Setting line followed by every Panel, Action, and speaker-dialogue line. Do not translate it into an "Image # / Interactions / Conversation" format.
 - The stored ChatGPT Library documents are the sole source for character appearance, proportions, wardrobe, palette, recurring props, and drawing style. Do not describe or restate any of those details in generation_prompt.
 - Do not include composition boilerplate, continuity reminders, image dimensions, filenames, hashtags, caption copy, article summaries, explanations, or safety disclaimers in generation_prompt.
-- Include only the scene-specific setting, character interactions/actions, and exact speech or thought text needed for each requested image.`;
+- Except for the required opening sentence, generation_prompt contains only the exact V1-style Content blueprint.`;
     const response=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{authorization:`Bearer ${apiKey}`,"content-type":"application/json"},body:JSON.stringify({model:process.env.OPENAI_MODEL??"gpt-5-mini",input:`${brandContract}\n\n${outputContract}\n\nCURRENT WORKFLOW INSTRUCTIONS\n${typeof workflowInstructions === "string" ? workflowInstructions : ""}\n\nCreate the complete GSD content concept and its final image-generation prompt. Follow the source material without repeating operational instructions in the public-facing content.\n\nSOURCE MATERIAL\n${prompt}`,text:{format:{type:"json_schema",name:"gsd_content",strict:true,schema:{type:"object",additionalProperties:false,properties:{content_type:{type:"string",enum:["Single Image","Carousel"]},panel_count:{type:"integer",minimum:1,maximum:10},score:{type:"number",minimum:0,maximum:100},overview:{type:"string"},content:{type:"string"},caption:{type:"string"},generation_prompt:{type:"string"}},required:["content_type","panel_count","score","overview","content","caption","generation_prompt"]}}}})});
     const body=await response.json() as {output_text?:string;output?:Array<{content?:Array<{type?:string;text?:string}>}>;error?:{message?:string}};
     const outputText=body.output_text??body.output?.flatMap(item=>item.content??[]).find(part=>part.type==="output_text")?.text;
     if(!response.ok||!outputText) throw new Error(body.error?.message??`OpenAI returned HTTP ${response.status} without structured output`);
-    const output=JSON.parse(outputText) as {content_type:"Single Image"|"Carousel";panel_count:number;score:number;overview:string;content:string;caption:string;generation_prompt:string};
+    const parsedOutput=JSON.parse(outputText) as {content_type:"Single Image"|"Carousel";panel_count:number;score:number;overview:string;content:string;caption:string;generation_prompt:string};
+    const contentBlueprint = parsedOutput.content.trim();
+    if (!/^Setting:\s*.+/m.test(contentBlueprint) || !/^Panel 1(?:\s+—.*)?$/m.test(contentBlueprint) || !/^Action:\s*.+/m.test(contentBlueprint)) {
+      throw new Error("Generation did not return the required V1 Setting / Panel / Action structure. Please try again.");
+    }
+    const output = {
+      ...parsedOutput,
+      content: contentBlueprint,
+      generation_prompt: `Use the Library documents, GSD image, VOICE, and ICP, etc to create the requested images\n\n${contentBlueprint}`,
+    };
     const {data:item}=await supabase.from("content_items").select("*").eq("id",id).single();
     if(!item||item.record_version!==expectedVersion){await supabase.from("generation_runs").update({status:"succeeded",output,completed_at:new Date().toISOString(),error_message:"Output retained but not promoted because the record changed"}).eq("id",run.id);redirect(`/content/${id}?notice=${encodeURIComponent("Generation completed but was not applied because the item changed. The output remains in Generation Runs.")}`);}
     const {data:saved,error:saveError}=await supabase.rpc("save_content_item",{p_id:id,p_expected_version:expectedVersion,p_title:item.title??"",p_status:"generated",p_content_type:output.content_type,p_panel_count:output.panel_count,p_overview:output.overview,p_content:output.content,p_caption:output.caption,p_generation_prompt:output.generation_prompt,p_score:output.score,p_priority:item.priority,p_is_favorite:item.is_favorite,p_instagram_url:item.instagram_url??"",p_publishing_notes:item.publishing_notes??"",p_reason:"AI generation promoted"});

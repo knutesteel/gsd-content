@@ -152,8 +152,16 @@ export async function queueImageGeneration(form: FormData) {
 
 export async function generateContent(form: FormData) {
   const { supabase, user } = await authenticatedClient();
-  const id=textValue(form,"id"); const prompt=textValue(form,"prompt"); const expectedVersion=numberValue(form,"record_version");
-  if (!prompt || !expectedVersion) redirect(`/content/${id}?notice=${encodeURIComponent("A prompt and current record version are required")}`);
+  const id=textValue(form,"id"); let prompt=textValue(form,"prompt"); const expectedVersion=numberValue(form,"record_version");
+  if (!expectedVersion) redirect(`/content/${id}?notice=${encodeURIComponent("A current record version is required")}`);
+  const {data:itemBeforeGeneration}=await supabase.from("content_items").select("title").eq("id",id).single();
+  if (!prompt) {
+    const {data:sourceLinks}=await supabase.from("content_sources").select("source_id").eq("content_item_id",id);
+    const sourceIds=(sourceLinks??[]).map(link=>link.source_id);
+    const {data:sources}=sourceIds.length?await supabase.from("sources").select("canonical_url,title,summary,strongest_comment").in("id",sourceIds):{data:[]};
+    prompt=`Create a GSD Instagram post based on this news article.\n\nArticle title: ${itemBeforeGeneration?.title??"Untitled article"}\n${(sources??[]).map(source=>`Source: ${source.canonical_url}\nArticle overview: ${source.summary??""}\nNotable angle: ${source.strongest_comment??""}`).join("\n\n")}`.trim();
+  }
+  if (!prompt) redirect(`/content/${id}?notice=${encodeURIComponent("Add a source or generation prompt first")}`);
   const key=crypto.randomUUID();
   const {data:run,error:runError}=await supabase.from("generation_runs").insert({owner_id:user.id,content_item_id:id,idempotency_key:key,prompt,status:"running"}).select().single();
   if(!run||runError) redirect(`/content/${id}?notice=${encodeURIComponent(runError?.message??"Could not start generation")}`);
@@ -171,14 +179,20 @@ export async function generateContent(form: FormData) {
 - Image prompts must explicitly identify Hank as a raccoon and the squirrel as a male squirrel in every panel. Keep backgrounds and character design consistent across a carousel.
 - Output is for the V2 app. Do not include Google Sheet instructions, CSV rows, filenames, claims that you cannot access tools, or offers to do more work.
 - Use no more than four hashtags and place them immediately before the CTA in the content.`;
-    const response=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{authorization:`Bearer ${apiKey}`,"content-type":"application/json"},body:JSON.stringify({model:process.env.OPENAI_MODEL??"gpt-5-mini",input:`${brandContract}\n\nCURRENT WORKFLOW INSTRUCTIONS\n${typeof workflowInstructions === "string" ? workflowInstructions : ""}\n\nReturn a concise overview, complete carousel or single-panel content, an Instagram caption, and an image-generation prompt. Follow the user's source prompt without repeating operational instructions in the output.\n\nSOURCE PROMPT\n${prompt}`,text:{format:{type:"json_schema",name:"gsd_content",strict:true,schema:{type:"object",additionalProperties:false,properties:{overview:{type:"string"},content:{type:"string"},caption:{type:"string"},generation_prompt:{type:"string"}},required:["overview","content","caption","generation_prompt"]}}}})});
+    const outputContract = `OUTPUT CONTRACT — NON-NEGOTIABLE
+- Overview must contain exactly two short paragraphs separated by a blank line. Paragraph 1 is a factual 1–2 sentence overview of the news article. Paragraph 2 is a 1–2 sentence GSD take explaining Hank and the squirrel's comedic/productivity angle.
+- Choose content_type as either "Single Image" or "Carousel".
+- Set panel_count to the exact number of visual panels. Use 1 for a single image.
+- Score the idea from 0–100 based on GSD brand fit, comedic potential, usefulness, and visual clarity.
+- The generation_prompt must direct ChatGPT to use the stored GSD Voice and Image Guidelines as the authoritative source for character appearance, voice, palette, props, and formatting. It must also restate essential character facts needed for reliable image generation.`;
+    const response=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{authorization:`Bearer ${apiKey}`,"content-type":"application/json"},body:JSON.stringify({model:process.env.OPENAI_MODEL??"gpt-5-mini",input:`${brandContract}\n\n${outputContract}\n\nCURRENT WORKFLOW INSTRUCTIONS\n${typeof workflowInstructions === "string" ? workflowInstructions : ""}\n\nCreate the complete GSD content concept and its final image-generation prompt. Follow the source material without repeating operational instructions in the public-facing content.\n\nSOURCE MATERIAL\n${prompt}`,text:{format:{type:"json_schema",name:"gsd_content",strict:true,schema:{type:"object",additionalProperties:false,properties:{content_type:{type:"string",enum:["Single Image","Carousel"]},panel_count:{type:"integer",minimum:1,maximum:10},score:{type:"number",minimum:0,maximum:100},overview:{type:"string"},content:{type:"string"},caption:{type:"string"},generation_prompt:{type:"string"}},required:["content_type","panel_count","score","overview","content","caption","generation_prompt"]}}}})});
     const body=await response.json() as {output_text?:string;output?:Array<{content?:Array<{type?:string;text?:string}>}>;error?:{message?:string}};
     const outputText=body.output_text??body.output?.flatMap(item=>item.content??[]).find(part=>part.type==="output_text")?.text;
     if(!response.ok||!outputText) throw new Error(body.error?.message??`OpenAI returned HTTP ${response.status} without structured output`);
-    const output=JSON.parse(outputText) as {overview:string;content:string;caption:string;generation_prompt:string};
+    const output=JSON.parse(outputText) as {content_type:"Single Image"|"Carousel";panel_count:number;score:number;overview:string;content:string;caption:string;generation_prompt:string};
     const {data:item}=await supabase.from("content_items").select("*").eq("id",id).single();
     if(!item||item.record_version!==expectedVersion){await supabase.from("generation_runs").update({status:"succeeded",output,completed_at:new Date().toISOString(),error_message:"Output retained but not promoted because the record changed"}).eq("id",run.id);redirect(`/content/${id}?notice=${encodeURIComponent("Generation completed but was not applied because the item changed. The output remains in Generation Runs.")}`);}
-    const {data:saved,error:saveError}=await supabase.rpc("save_content_item",{p_id:id,p_expected_version:expectedVersion,p_title:item.title??"",p_status:"generated",p_content_type:item.content_type??"",p_panel_count:item.panel_count,p_overview:output.overview,p_content:output.content,p_caption:output.caption,p_generation_prompt:output.generation_prompt,p_score:item.score,p_priority:item.priority,p_is_favorite:item.is_favorite,p_instagram_url:item.instagram_url??"",p_publishing_notes:item.publishing_notes??"",p_reason:"AI generation promoted"});
+    const {data:saved,error:saveError}=await supabase.rpc("save_content_item",{p_id:id,p_expected_version:expectedVersion,p_title:item.title??"",p_status:"generated",p_content_type:output.content_type,p_panel_count:output.panel_count,p_overview:output.overview,p_content:output.content,p_caption:output.caption,p_generation_prompt:output.generation_prompt,p_score:output.score,p_priority:item.priority,p_is_favorite:item.is_favorite,p_instagram_url:item.instagram_url??"",p_publishing_notes:item.publishing_notes??"",p_reason:"AI generation promoted"});
     const savedObject=resultObject(saved as Json); if(saveError||savedObject.result!=="saved") throw new Error(saveError?.message??String(savedObject.reason??"Could not promote output"));
     await supabase.from("generation_runs").update({status:"succeeded",output,promoted_at:new Date().toISOString(),completed_at:new Date().toISOString()}).eq("id",run.id);
     revalidatePath("/"); revalidatePath(`/content/${id}`); redirect(`/content/${id}?notice=${encodeURIComponent("Content generated and saved as a new version")}`);

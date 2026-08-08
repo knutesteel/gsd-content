@@ -37,6 +37,29 @@ export async function duplicateItem(form: FormData) {
   redirect(`/content/${result.id}?notice=${encodeURIComponent(`Created variation ${String(result.identifier)}`)}`);
 }
 
+export async function deleteItem(form: FormData) {
+  const { supabase } = await authenticatedClient();
+  const id = textValue(form, "id");
+  const { data: item } = await supabase.from("content_items").select("identifier").eq("id", id).single();
+  if (!item) redirect(`/?notice=${encodeURIComponent("Item not found")}`);
+  const { error } = await supabase.from("content_items").delete().eq("id", id);
+  revalidatePath("/");
+  redirect(`/?notice=${encodeURIComponent(error ? `Delete failed: ${error.message}` : `Deleted item ${item.identifier}`)}`);
+}
+
+export async function recordPublishingHandoff(form: FormData) {
+  const { supabase, user } = await authenticatedClient();
+  const id = textValue(form, "id");
+  const { error } = await supabase.from("activity_events").insert({
+    owner_id: user.id,
+    content_item_id: id,
+    event_type: "publishing_handoff",
+    details: { destination: "instagram", caption_copied: true },
+  });
+  revalidatePath("/"); revalidatePath(`/content/${id}`);
+  redirect(`/content/${id}?notice=${encodeURIComponent(error ? `Publishing handoff failed: ${error.message}` : "Caption copied and Instagram opened. Mark Posted after publishing.")}`);
+}
+
 export async function saveItem(_previous: ActionResult, form: FormData): Promise<ActionResult> {
   const { supabase } = await authenticatedClient();
   const status = textValue(form, "status") as ContentStatus;
@@ -100,7 +123,18 @@ export async function generateContent(form: FormData) {
   const apiKey=process.env.OPENAI_API_KEY;
   if(!apiKey){ await supabase.from("generation_runs").update({status:"failed",error_message:"OPENAI_API_KEY is not configured",completed_at:new Date().toISOString()}).eq("id",run.id); redirect(`/content/${id}?notice=${encodeURIComponent("AI generation is ready but the server API key is not configured")}`); }
   try {
-    const response=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{authorization:`Bearer ${apiKey}`,"content-type":"application/json"},body:JSON.stringify({model:process.env.OPENAI_MODEL??"gpt-5-mini",input:`Follow the GSD voice and image guidance in the prompt. Return a concise overview, complete carousel or single-panel content, an Instagram caption, and an image-generation prompt.\n\n${prompt}`,text:{format:{type:"json_schema",name:"gsd_content",strict:true,schema:{type:"object",additionalProperties:false,properties:{overview:{type:"string"},content:{type:"string"},caption:{type:"string"},generation_prompt:{type:"string"}},required:["overview","content","caption","generation_prompt"]}}}})});
+    const { data: instructionSetting } = await supabase.from("app_settings").select("setting_value").eq("setting_key", "instructions").maybeSingle();
+    const workflowInstructions = resultObject((instructionSetting?.setting_value ?? {}) as Json).markdown;
+    const brandContract = `GSD BRAND CONTRACT — NON-NEGOTIABLE
+- Hank is a raccoon, never a human. He is calm, practical, organized, and usually wears his familiar hoodie.
+- The squirrel is a male squirrel, never human and never given feminine characteristics. He is energetic, distractible, funny, and expressive without looking angry or frightened.
+- Murphy, when used, is a happy, aware Bernese Mountain Dog.
+- Preserve the established Hank, squirrel, and Murphy appearance, proportions, wardrobe, palette, and recurring props. Laptops are plain gray. Hank's standard mug reads "Focus > Fluff" in white on three lines.
+- Tone is concise, warm, practical, and workplace-observational. Hank grounds the scene; the squirrel supplies energetic comic contrast. Do not turn either character into a generic motivational mascot.
+- Image prompts must explicitly identify Hank as a raccoon and the squirrel as a male squirrel in every panel. Keep backgrounds and character design consistent across a carousel.
+- Output is for the V2 app. Do not include Google Sheet instructions, CSV rows, filenames, claims that you cannot access tools, or offers to do more work.
+- Use no more than four hashtags and place them immediately before the CTA in the content.`;
+    const response=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{authorization:`Bearer ${apiKey}`,"content-type":"application/json"},body:JSON.stringify({model:process.env.OPENAI_MODEL??"gpt-5-mini",input:`${brandContract}\n\nCURRENT WORKFLOW INSTRUCTIONS\n${typeof workflowInstructions === "string" ? workflowInstructions : ""}\n\nReturn a concise overview, complete carousel or single-panel content, an Instagram caption, and an image-generation prompt. Follow the user's source prompt without repeating operational instructions in the output.\n\nSOURCE PROMPT\n${prompt}`,text:{format:{type:"json_schema",name:"gsd_content",strict:true,schema:{type:"object",additionalProperties:false,properties:{overview:{type:"string"},content:{type:"string"},caption:{type:"string"},generation_prompt:{type:"string"}},required:["overview","content","caption","generation_prompt"]}}}})});
     const body=await response.json() as {output_text?:string;output?:Array<{content?:Array<{type?:string;text?:string}>}>;error?:{message?:string}};
     const outputText=body.output_text??body.output?.flatMap(item=>item.content??[]).find(part=>part.type==="output_text")?.text;
     if(!response.ok||!outputText) throw new Error(body.error?.message??`OpenAI returned HTTP ${response.status} without structured output`);

@@ -66,15 +66,22 @@ export async function saveItem(_previous: ActionResult, form: FormData): Promise
   if (!statuses.has(status)) return { ok: false, message: "Invalid status" };
   const expectedVersion = numberValue(form, "record_version");
   if (!expectedVersion) return { ok: false, message: "Missing record version" };
+  const id = textValue(form, "id");
+  const { data: existing, error: existingError } = await supabase
+    .from("content_items")
+    .select("instagram_url,publishing_notes")
+    .eq("id", id)
+    .single();
+  if (existingError || !existing) return { ok: false, message: `Save failed: ${existingError?.message ?? "Item not found"}` };
   const args = {
-    p_id: textValue(form, "id"), p_expected_version: expectedVersion,
+    p_id: id, p_expected_version: expectedVersion,
     p_title: textValue(form, "title"), p_status: status, p_content_type: textValue(form, "content_type"),
     p_panel_count: numberValue(form, "panel_count"), p_overview: textValue(form, "overview"),
     p_content: textValue(form, "content"), p_caption: textValue(form, "caption"),
     p_generation_prompt: textValue(form, "generation_prompt"), p_score: numberValue(form, "score"),
     p_priority: numberValue(form, "priority"), p_is_favorite: form.get("is_favorite") === "on",
-    p_instagram_url: textValue(form, "instagram_url"), p_publishing_notes: textValue(form, "publishing_notes"),
-    p_reason: textValue(form, "reason") || "Content edited",
+    p_instagram_url: existing.instagram_url ?? "", p_publishing_notes: existing.publishing_notes ?? "",
+    p_reason: "Content edited",
   };
   const { data, error } = await supabase.rpc("save_content_item", args);
   if (error) return { ok: false, message: `Save failed: ${error.message}` };
@@ -112,7 +119,10 @@ export async function quickStatus(form: FormData) {
   });
   const result = resultObject(data as Json);
   revalidatePath("/");
-  redirect(`/?notice=${encodeURIComponent(error ? error.message : result.result === "saved" ? "Status updated" : String(result.reason ?? "Update failed"))}`);
+  const requestedReturnPath = textValue(form, "return_to");
+  const returnPath = /^\/content\/[0-9a-f-]+$/i.test(requestedReturnPath) ? requestedReturnPath : "/";
+  const notice = error ? error.message : result.result === "saved" ? "Status updated" : String(result.reason ?? "Update failed");
+  redirect(`${returnPath}?notice=${encodeURIComponent(notice)}`);
 }
 
 export async function recordGeneration(form: FormData) {
@@ -150,6 +160,38 @@ export async function queueImageGeneration(form: FormData) {
   redirect(`/content/${id}?notice=${encodeURIComponent(error ? `Image generation handoff failed: ${error.message}` : "Prompt copied and ChatGPT opened. This article is now watching GSD Auto Assets for completed images.")}`);
 }
 
+export async function importLegacyImages(form: FormData) {
+  const { supabase, user } = await authenticatedClient();
+  const id = textValue(form, "id");
+  const identifier = textValue(form, "identifier");
+  if (!id || !identifier) redirect(`/?notice=${encodeURIComponent("Article identifier is required")}`);
+  const { data: item } = await supabase.from("content_items").select("status,panel_count").eq("id", id).single();
+  const { count } = await supabase.from("assets").select("id", { count: "exact", head: true }).eq("content_item_id", id).in("kind", ["image", "carousel_slide"]);
+  if (!item || item.status !== "generated" || !item.panel_count || (count ?? 0) > 0) {
+    redirect(`/content/${id}?notice=${encodeURIComponent("Legacy image import is available only for Generated entries that show an image count but have no attached images")}`);
+  }
+  const { data: pendingJobs } = await supabase.from("scheduled_jobs").select("input").eq("owner_id", user.id).eq("job_type", "drive_image_watch").in("status", ["queued", "running"]);
+  const alreadyQueued = (pendingJobs ?? []).some((job) => resultObject(job.input).content_item_id === id && resultObject(job.input).import_existing === true);
+  if (alreadyQueued) redirect(`/content/${id}?notice=${encodeURIComponent("Image import is already queued for this entry")}`);
+  const requestedAt = new Date().toISOString();
+  const { error } = await supabase.from("scheduled_jobs").insert({
+    owner_id: user.id,
+    job_type: "drive_image_watch",
+    idempotency_key: crypto.randomUUID(),
+    status: "queued",
+    input: { content_item_id: id, identifier, requested_at: requestedAt, attempts: 0, import_existing: true },
+    run_after: requestedAt,
+  });
+  if (!error) await supabase.from("activity_events").insert({
+    owner_id: user.id,
+    content_item_id: id,
+    event_type: "legacy_image_import_started",
+    details: { drive_folder: "GSD Auto Assets", identifier },
+  });
+  revalidatePath(`/content/${id}`);
+  redirect(`/content/${id}?notice=${encodeURIComponent(error ? `Image import failed: ${error.message}` : "Import started. Matching images from GSD Auto Assets will appear here after the watcher runs.")}`);
+}
+
 export async function generateContent(form: FormData) {
   const { supabase, user } = await authenticatedClient();
   const id=textValue(form,"id"); let prompt=textValue(form,"prompt"); const expectedVersion=numberValue(form,"record_version");
@@ -176,7 +218,9 @@ export async function generateContent(form: FormData) {
 - Murphy, when used, is a happy, aware Bernese Mountain Dog.
 - Preserve the established Hank, squirrel, and Murphy appearance, proportions, wardrobe, palette, and recurring props. Laptops are plain gray. Hank's standard mug reads "Focus > Fluff" in white on three lines.
 - Tone is concise, warm, practical, and workplace-observational. Hank grounds the scene; the squirrel supplies energetic comic contrast. Do not turn either character into a generic motivational mascot.
-- Image prompts must explicitly identify Hank as a raccoon and the squirrel as a male squirrel in every panel. Keep backgrounds and character design consistent across a carousel.
+- This is an edgy comedy brand. Depict absurd, awkward, confrontational, and slapstick moments directly when the source and joke call for them. Do not weaken an ordinary comedic scene with euphemisms, off-screen substitutes, empty-chair symbolism, or editorial safety commentary.
+- Describe what is visibly happening in plain language. For example: "A clown sits with his hands behind him on a chair as a turtle walks up to a table of pies." Do not append phrases such as "without showing harm," "indicates the alleged incident," "avoid distress," or similar disclaimers unless a specific detail would otherwise require graphic gore or explicit injury.
+- Use the stored Library guidelines to inform the concept, but do not repeat character descriptions, appearance rules, wardrobe, palette, props, or drawing-style instructions in generation_prompt.
 - Output is for the V2 app. Do not include Google Sheet instructions, CSV rows, filenames, claims that you cannot access tools, or offers to do more work.
 - Use no more than four hashtags and place them immediately before the CTA in the content.`;
     const outputContract = `OUTPUT CONTRACT — NON-NEGOTIABLE
@@ -184,7 +228,17 @@ export async function generateContent(form: FormData) {
 - Choose content_type as either "Single Image" or "Carousel".
 - Set panel_count to the exact number of visual panels. Use 1 for a single image.
 - Score the idea from 0–100 based on GSD brand fit, comedic potential, usefulness, and visual clarity.
-- The generation_prompt must direct ChatGPT to use the stored GSD Voice and Image Guidelines as the authoritative source for character appearance, voice, palette, props, and formatting. It must also restate essential character facts needed for reliable image generation.`;
+- Caption must be finished, publish-ready Instagram copy for the post—not a summary, inventory, or description of the image. It should deliver the joke or observation in the GSD voice, connect it to the article or workplace/productivity angle, and end with an engaging CTA when appropriate. Do not begin with "This image shows" or narrate the composition.
+- The generation_prompt must begin with this exact sentence: "Use the Library documents, GSD image, VOICE, and ICP, etc to create the requested images"
+- After that opening sentence, format every requested image as its own clean block using exactly these line labels, with a blank line between image blocks:
+  Image #: [sequential number]
+  Setting: [where the scene takes place and only the objects or environmental details needed for the scene]
+  Interactions: [what the characters are doing and how they are reacting to one another]
+  Conversation: [the exact speech or thought text, with each speaker clearly identified; write "None" when there is no dialogue]
+- Do not combine those labels into paragraphs or use "Panel" as a substitute for "Image".
+- The stored ChatGPT Library documents are the sole source for character appearance, proportions, wardrobe, palette, recurring props, and drawing style. Do not describe or restate any of those details in generation_prompt.
+- Do not include composition boilerplate, continuity reminders, image dimensions, filenames, hashtags, caption copy, article summaries, explanations, or safety disclaimers in generation_prompt.
+- Include only the scene-specific setting, character interactions/actions, and exact speech or thought text needed for each requested image.`;
     const response=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{authorization:`Bearer ${apiKey}`,"content-type":"application/json"},body:JSON.stringify({model:process.env.OPENAI_MODEL??"gpt-5-mini",input:`${brandContract}\n\n${outputContract}\n\nCURRENT WORKFLOW INSTRUCTIONS\n${typeof workflowInstructions === "string" ? workflowInstructions : ""}\n\nCreate the complete GSD content concept and its final image-generation prompt. Follow the source material without repeating operational instructions in the public-facing content.\n\nSOURCE MATERIAL\n${prompt}`,text:{format:{type:"json_schema",name:"gsd_content",strict:true,schema:{type:"object",additionalProperties:false,properties:{content_type:{type:"string",enum:["Single Image","Carousel"]},panel_count:{type:"integer",minimum:1,maximum:10},score:{type:"number",minimum:0,maximum:100},overview:{type:"string"},content:{type:"string"},caption:{type:"string"},generation_prompt:{type:"string"}},required:["content_type","panel_count","score","overview","content","caption","generation_prompt"]}}}})});
     const body=await response.json() as {output_text?:string;output?:Array<{content?:Array<{type?:string;text?:string}>}>;error?:{message?:string}};
     const outputText=body.output_text??body.output?.flatMap(item=>item.content??[]).find(part=>part.type==="output_text")?.text;

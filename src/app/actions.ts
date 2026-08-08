@@ -79,3 +79,13 @@ export async function quickStatus(form: FormData) {
   revalidatePath("/");
   redirect(`/?notice=${encodeURIComponent(error ? error.message : result.result === "saved" ? "Status updated" : String(result.reason ?? "Update failed"))}`);
 }
+
+export async function recordGeneration(form: FormData) {
+  const { supabase, user } = await authenticatedClient();
+  const id = textValue(form, "id"); const prompt = textValue(form, "prompt");
+  if (!prompt) redirect(`/content/${id}?notice=${encodeURIComponent("Add a generation prompt first")}`);
+  const { error } = await supabase.from("generation_runs").insert({ owner_id: user.id, content_item_id: id, idempotency_key: crypto.randomUUID(), prompt, status: "queued" });
+  if (!error) await supabase.from("activity_events").insert({ owner_id: user.id, content_item_id: id, event_type: "generation_started", details: { source: "content_detail" } });
+  revalidatePath(`/content/${id}`);
+  redirect(`/content/${id}?notice=${encodeURIComponent(error ? `Generation tracking failed: ${error.message}` : "Generation run recorded and prompt ready to copy")}`);
+}

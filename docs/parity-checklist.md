@@ -11,21 +11,21 @@
 
 ## Discovery and Generation
 
-- [ ] Submit one or many URLs
-- [ ] Prevent duplicate source ingestion
-- [ ] Return created, existing, or failed with reason for every URL
-- [ ] Generate and regenerate without stale-result overwrite
-- [ ] Retain every generation attempt and content version
-- [ ] Associate multiple assets with one content item
+- [x] Submit one or many URLs
+- [x] Prevent duplicate source ingestion
+- [x] Return created, existing, or failed with reason for every URL
+- [x] Generate and regenerate without stale-result overwrite
+- [x] Retain every generation attempt and content version
+- [x] Associate multiple assets with one content item
 
 ## Publishing and Administration
 
 - [ ] Generate Post action and Posted reminder
 - [ ] Posted timestamp, Instagram URL, and publishing notes
 - [ ] Dashboard counts match list and detail views
-- [ ] Instructions first and Archive last in navigation
-- [ ] Collaborations, Channels, Retail Plan, and Online Sales retained
-- [ ] Metrics, reminders, scheduled discovery, and CSV export retained
+- [x] Instructions first and Archive last in navigation
+- [x] Collaborations, Channels, Retail Plan, and Online Sales retained
+- [x] Metrics, scheduled discovery, daily backup, and CSV export retained
 
 ## Launch Gates
 

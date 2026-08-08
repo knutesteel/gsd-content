@@ -19,6 +19,18 @@ V2 of the Hank and the Squirrel content application. PostgreSQL is the source of
 - Production and preview environments connected to Supabase
 - Vercel project connected to the GitHub repository
 
+## Milestones 3–4
+
+- Database-backed content dashboard and version-safe editing
+- Multi-URL discovery with explicit per-URL outcomes
+- Server-side AI generation with immutable run history and stale-write protection
+- Scheduled discovery and daily CSV backups
+- Metrics entry, history, and on-demand export
+- Editable Instructions and operational Collaborations, Channels, Retail Plan, and Online Sales modules
+- Database-backed checklists, statuses, links, notes, and collaborator follower counts
+
+AI generation requires `OPENAI_API_KEY`. Scheduled jobs require `CRON_SECRET` and `SUPABASE_SECRET_KEY` in Vercel. These values are server-only and must never use a `NEXT_PUBLIC_` prefix.
+
 ## Local Setup
 
 1. Copy `.env.example` to `.env.local`.

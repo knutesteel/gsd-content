@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { ContentStatus, Json } from "@/types/database";
 
@@ -88,4 +88,26 @@ export async function recordGeneration(form: FormData) {
   if (!error) await supabase.from("activity_events").insert({ owner_id: user.id, content_item_id: id, event_type: "generation_started", details: { source: "content_detail" } });
   revalidatePath(`/content/${id}`);
   redirect(`/content/${id}?notice=${encodeURIComponent(error ? `Generation tracking failed: ${error.message}` : "Generation run recorded and prompt ready to copy")}`);
+}
+
+export async function generateContent(form: FormData) {
+  const { supabase, user } = await authenticatedClient();
+  const id=textValue(form,"id"); const prompt=textValue(form,"prompt"); const expectedVersion=numberValue(form,"record_version");
+  if (!prompt || !expectedVersion) redirect(`/content/${id}?notice=${encodeURIComponent("A prompt and current record version are required")}`);
+  const key=crypto.randomUUID();
+  const {data:run,error:runError}=await supabase.from("generation_runs").insert({owner_id:user.id,content_item_id:id,idempotency_key:key,prompt,status:"running"}).select().single();
+  if(!run||runError) redirect(`/content/${id}?notice=${encodeURIComponent(runError?.message??"Could not start generation")}`);
+  const apiKey=process.env.OPENAI_API_KEY;
+  if(!apiKey){ await supabase.from("generation_runs").update({status:"failed",error_message:"OPENAI_API_KEY is not configured",completed_at:new Date().toISOString()}).eq("id",run.id); redirect(`/content/${id}?notice=${encodeURIComponent("AI generation is ready but the server API key is not configured")}`); }
+  try {
+    const response=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{authorization:`Bearer ${apiKey}`,"content-type":"application/json"},body:JSON.stringify({model:process.env.OPENAI_MODEL??"gpt-5-mini",input:`Follow the GSD voice and image guidance in the prompt. Return a concise overview, complete carousel or single-panel content, an Instagram caption, and an image-generation prompt.\n\n${prompt}`,text:{format:{type:"json_schema",name:"gsd_content",strict:true,schema:{type:"object",additionalProperties:false,properties:{overview:{type:"string"},content:{type:"string"},caption:{type:"string"},generation_prompt:{type:"string"}},required:["overview","content","caption","generation_prompt"]}}}})});
+    const body=await response.json() as {output_text?:string;error?:{message?:string}}; if(!response.ok||!body.output_text) throw new Error(body.error?.message??`OpenAI returned HTTP ${response.status}`);
+    const output=JSON.parse(body.output_text) as {overview:string;content:string;caption:string;generation_prompt:string};
+    const {data:item}=await supabase.from("content_items").select("*").eq("id",id).single();
+    if(!item||item.record_version!==expectedVersion){await supabase.from("generation_runs").update({status:"succeeded",output,completed_at:new Date().toISOString(),error_message:"Output retained but not promoted because the record changed"}).eq("id",run.id);redirect(`/content/${id}?notice=${encodeURIComponent("Generation completed but was not applied because the item changed. The output remains in Generation Runs.")}`);}
+    const {data:saved,error:saveError}=await supabase.rpc("save_content_item",{p_id:id,p_expected_version:expectedVersion,p_title:item.title??"",p_status:"generated",p_content_type:item.content_type??"",p_panel_count:item.panel_count,p_overview:output.overview,p_content:output.content,p_caption:output.caption,p_generation_prompt:output.generation_prompt,p_score:item.score,p_priority:item.priority,p_is_favorite:item.is_favorite,p_instagram_url:item.instagram_url??"",p_publishing_notes:item.publishing_notes??"",p_reason:"AI generation promoted"});
+    const savedObject=resultObject(saved as Json); if(saveError||savedObject.result!=="saved") throw new Error(saveError?.message??String(savedObject.reason??"Could not promote output"));
+    await supabase.from("generation_runs").update({status:"succeeded",output,promoted_at:new Date().toISOString(),completed_at:new Date().toISOString()}).eq("id",run.id);
+    revalidatePath("/"); revalidatePath(`/content/${id}`); redirect(`/content/${id}?notice=${encodeURIComponent("Content generated and saved as a new version")}`);
+  } catch(error) { unstable_rethrow(error); await supabase.from("generation_runs").update({status:"failed",error_message:error instanceof Error?error.message:"Unknown generation error",completed_at:new Date().toISOString()}).eq("id",run.id); redirect(`/content/${id}?notice=${encodeURIComponent(error instanceof Error?error.message:"Generation failed")}`); }
 }

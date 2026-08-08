@@ -1,0 +1,4 @@
+import { requireAdmin } from "@/lib/auth";
+
+function csv(value: unknown) { const s=value==null?"":String(value); return /[",\n]/.test(s)?`"${s.replaceAll('"','""')}"`:s; }
+export async function GET() { const {supabase}=await requireAdmin(); const {data,error}=await supabase.from("content_items").select("*").order("created_at"); if(error) return Response.json({error:error.message},{status:500}); const headers=["identifier","title","status","content_type","panel_count","overview","content","caption","generation_prompt","score","priority","is_favorite","instagram_url","publishing_notes","generated_at","posted_at","archived_at","created_at","updated_at"]; const body=[headers.join(","),...(data??[]).map(row=>headers.map(h=>csv(row[h as keyof typeof row])).join(","))].join("\n"); return new Response(body,{headers:{"content-type":"text/csv; charset=utf-8","content-disposition":`attachment; filename="gsd-content-${new Date().toISOString().slice(0,10)}.csv"`}}); }

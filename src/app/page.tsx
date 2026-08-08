@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { createItem, quickStatus } from "./actions";
-import { logout } from "./login/actions";
+import { AppHeader } from "@/components/app-header";
 import type { ContentItem, ContentStatus } from "@/types/database";
 
 const statusOrder: ContentStatus[] = ["new", "auto_added", "generated", "posted", "archived"];
@@ -30,7 +30,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
   const filtered = all.filter((item) => (!selectedStatus || item.status === selectedStatus) && (params.favorite !== "1" || item.is_favorite) && (!query || [item.identifier,item.title,item.overview,item.caption,item.content].some((value) => value?.toLowerCase().includes(query))));
   const items = sortItems(filtered, params.sort ?? "created", params.direction ?? "desc");
   return <main className="app-shell">
-    <header className="topbar"><Link className="brand" href="/">GSD Content <small>V2</small></Link><nav><Link href="/">Dashboard</Link><Link href="/migration">Migration</Link><form action={logout}><button>Sign Out</button></form></nav></header>
+    <AppHeader />
     <section className="dashboard-head"><div><p className="eyebrow">Content Operating System</p><h1>Get Sh*t Posted.</h1><p>{all.length} migrated ideas · {all.filter((item) => item.is_favorite).length} favorites · {all.filter((item) => item.status !== "archived").length} active</p></div><form action={createItem} className="create-form"><input name="title" placeholder="New idea title" aria-label="New idea title" /><button className="primary">Add Idea</button></form></section>
     {params.notice ? <div className="notice">{params.notice}</div> : null}
     <section className="status-grid">{statusOrder.map((status) => <Link key={status} href={status === selectedStatus ? "/" : `/?status=${status}`} data-active={status === selectedStatus}><span>{labels[status]}</span><strong>{counts[status]}</strong></Link>)}</section>

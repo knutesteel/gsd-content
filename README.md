@@ -10,6 +10,15 @@ V2 of the Hank and the Squirrel content application. PostgreSQL is the source of
 - Content versioning, status history, generation runs, assets, sources, metrics, and job history
 - Migration and feature-parity specifications
 
+## Milestone 2
+
+- Supabase-backed server and browser clients
+- Private single-admin access for `knutesteel@gmail.com`
+- Google OAuth login with a server-side admin allowlist
+- Read-only CSV/JSON migration reconciliation
+- Production and preview environments connected to Supabase
+- Vercel project connected to the GitHub repository
+
 ## Local Setup
 
 1. Copy `.env.example` to `.env.local`.

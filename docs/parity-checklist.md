@@ -2,12 +2,12 @@
 
 ## Content
 
-- [ ] Create, edit, duplicate, archive, restore, and delete
-- [ ] Identifiers such as `32`, `32-1`, and `32-2`
-- [ ] New, Auto-Added, Generated, Posted, and Archived statuses
-- [ ] Overview, caption, content, prompt, type, panels, source, score, and priority
-- [ ] Favorite, search, filter, and numeric variant sorting
-- [ ] Posted content sorted by the actual Posted transition timestamp
+- [x] Create, edit, duplicate, archive, restore, and delete
+- [x] Identifiers such as `32`, `32-1`, and `32-2`
+- [x] New, Auto-Added, Generated, Posted, and Archived statuses
+- [x] Overview, caption, content, prompt, type, panels, source, score, and priority
+- [x] Favorite, search, filter, and numeric variant sorting
+- [x] Posted content sorted by the actual Posted transition timestamp
 
 ## Discovery and Generation
 
@@ -20,18 +20,18 @@
 
 ## Publishing and Administration
 
-- [ ] Generate Post action and Posted reminder
-- [ ] Posted timestamp, Instagram URL, and publishing notes
-- [ ] Dashboard counts match list and detail views
+- [x] Generate Post action and Posted reminder
+- [x] Posted timestamp, Instagram URL, and publishing notes
+- [x] Dashboard counts match list and detail views
 - [x] Instructions first and Archive last in navigation
 - [x] Collaborations, Channels, Retail Plan, and Online Sales retained
 - [x] Metrics, scheduled discovery, daily backup, and CSV export retained
 
 ## Launch Gates
 
-- [ ] Every existing record accounted for
-- [ ] No unexplained duplicate identifier
-- [ ] App-only records can be archived
-- [ ] Regeneration cannot be overwritten by an older request
-- [ ] Every batch operation has an explicit per-record result
-- [ ] No operational Google Sheets API call remains
+- [x] Every existing record accounted for
+- [x] No unexplained duplicate identifier
+- [x] App-only records can be archived
+- [x] Regeneration cannot be overwritten by an older request
+- [x] Every batch operation has an explicit per-record result
+- [x] No operational Google Sheets API call remains

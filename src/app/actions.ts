@@ -89,7 +89,19 @@ export async function quickStatus(form: FormData) {
   const id = textValue(form, "id");
   const { data: item } = await supabase.from("content_items").select("*").eq("id", id).single();
   if (!item) redirect(`/?notice=${encodeURIComponent("Item not found")}`);
-  const status = textValue(form, "status") as ContentStatus;
+  let status = textValue(form, "status") as ContentStatus;
+  if (form.get("restore") === "1" && item.status === "archived") {
+    const { data: archivedTransition } = await supabase
+      .from("status_history")
+      .select("from_status")
+      .eq("content_item_id", id)
+      .eq("to_status", "archived")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const previousStatus = archivedTransition?.from_status as ContentStatus | null | undefined;
+    status = previousStatus && previousStatus !== "archived" ? previousStatus : "new";
+  }
   const { data, error } = await supabase.rpc("save_content_item", {
     p_id: item.id, p_expected_version: item.record_version, p_title: item.title ?? "", p_status: status,
     p_content_type: item.content_type ?? "", p_panel_count: item.panel_count, p_overview: item.overview ?? "",

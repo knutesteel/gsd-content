@@ -24,18 +24,32 @@ async function googleAccessToken(){
   const body=await response.json() as {access_token?:string;error_description?:string};if(!response.ok||!body.access_token)throw new Error(body.error_description??"Google authorization failed");return body.access_token;
 }
 function driveFileOrder(name:string){const match=name.match(/(?:image|carousel)[-_ ]?(\d+)/i);return match?Number(match[1]):1;}
+function driveRevision(file:{modifiedTime?:string;createdTime?:string}){return file.modifiedTime??file.createdTime??new Date(0).toISOString();}
 async function syncDriveImages(supabase:ReturnType<typeof createClient<Database>>,job:Database["public"]["Tables"]["scheduled_jobs"]["Row"]){
   const input=object(job.input);const contentId=String(input.content_item_id??"");const identifier=String(input.identifier??"");const requestedAt=String(input.requested_at??job.created_at);const attempts=Number(input.attempts??0);
   const folder=process.env.GOOGLE_DRIVE_FOLDER_ID;if(!contentId||!identifier||!folder)throw new Error("Drive watch job is missing its article or folder configuration");
   const token=await googleAccessToken();const prefix=`GSD-${identifier}-`;const query=`'${folder.replaceAll("'","\\'")}' in parents and trashed = false and name contains '${prefix.replaceAll("'","\\'")}'`;
   const listing=await fetch(`https://www.googleapis.com/drive/v3/files?${new URLSearchParams({q:query,fields:"files(id,name,mimeType,createdTime,modifiedTime,webViewLink,size)",orderBy:"name",pageSize:"100"})}`,{headers:{authorization:`Bearer ${token}`}});
   const listed=await listing.json() as {files?:Array<{id:string;name:string;mimeType:string;createdTime?:string;modifiedTime?:string;webViewLink?:string;size?:string}>;error?:{message?:string}};if(!listing.ok)throw new Error(listed.error?.message??"Drive listing failed");
-  const files=(listed.files??[]).filter(file=>file.mimeType.startsWith("image/")&&new Date(file.createdTime??file.modifiedTime??0).getTime()>=new Date(requestedAt).getTime()-60_000);
+  const files=(listed.files??[]).filter(file=>file.mimeType.startsWith("image/")&&new Date(driveRevision(file)).getTime()>=new Date(requestedAt).getTime()-60_000);
   if(!files.length){if(attempts>=71){await supabase.from("scheduled_jobs").update({status:"failed",error_message:"No matching Drive images appeared within six hours",completed_at:new Date().toISOString()}).eq("id",job.id);return {result:"timed_out",count:0};}const next=new Date(Date.now()+5*60_000).toISOString();await supabase.from("scheduled_jobs").update({status:"queued",input:{...input,attempts:attempts+1},run_after:next,started_at:null,result:{last_checked_at:new Date().toISOString()}}).eq("id",job.id);return {result:"waiting",count:0};}
-  let attached=0;
-  for(const file of files){const storagePath=`${job.owner_id}/drive/${contentId}/${file.id}-${file.name.replace(/[^a-zA-Z0-9._-]/g,"-")}`;const {data:existing}=await supabase.from("assets").select("id").eq("owner_id",job.owner_id).eq("storage_path",storagePath).maybeSingle();if(existing)continue;const download=await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`,{headers:{authorization:`Bearer ${token}`}});if(!download.ok)throw new Error(`Could not download ${file.name}`);const bytes=await download.arrayBuffer();const {error:uploadError}=await supabase.storage.from("content-assets").upload(storagePath,bytes,{contentType:file.mimeType,upsert:false});if(uploadError)throw uploadError;const order=driveFileOrder(file.name);const {error:assetError}=await supabase.from("assets").insert({owner_id:job.owner_id,content_item_id:contentId,kind:files.length>1?"carousel_slide":"image",storage_path:storagePath,slide_number:files.length>1?order:null,metadata:{drive_file_id:file.id,drive_url:file.webViewLink??null,source_filename:file.name,size:file.size??String(bytes.byteLength)}});if(assetError)throw assetError;attached++;}
-  await supabase.from("activity_events").insert({owner_id:job.owner_id,content_item_id:contentId,event_type:"drive_images_attached",details:{count:attached,identifier}});
-  await supabase.from("scheduled_jobs").update({status:"succeeded",result:{attached,matched:files.length},completed_at:new Date().toISOString()}).eq("id",job.id);return {result:"attached",count:attached};
+  let attached=0;let updated=0;let unchanged=0;
+  const {data:existingAssets,error:existingError}=await supabase.from("assets").select("id,storage_path,metadata").eq("owner_id",job.owner_id).eq("content_item_id",contentId).in("kind",["image","carousel_slide"]);
+  if(existingError)throw existingError;
+  for(const file of files){
+    const revision=driveRevision(file);const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,"-");
+    const existing=(existingAssets??[]).find(asset=>{const metadata=object(asset.metadata);return metadata.drive_file_id===file.id||metadata.source_filename===file.name;});
+    const existingMetadata=existing?object(existing.metadata):{};
+    if(existing&&existingMetadata.drive_modified_time===revision){unchanged++;continue;}
+    const revisionKey=revision.replace(/[^0-9]/g,"");const storagePath=`${job.owner_id}/drive/${contentId}/${file.id}-${revisionKey}-${safeName}`;
+    const download=await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`,{headers:{authorization:`Bearer ${token}`}});if(!download.ok)throw new Error(`Could not download ${file.name}`);
+    const bytes=await download.arrayBuffer();const {error:uploadError}=await supabase.storage.from("content-assets").upload(storagePath,bytes,{contentType:file.mimeType,upsert:false});if(uploadError)throw uploadError;
+    const order=driveFileOrder(file.name);const {error:assetError}=await supabase.from("assets").insert({owner_id:job.owner_id,content_item_id:contentId,kind:files.length>1?"carousel_slide":"image",storage_path:storagePath,slide_number:files.length>1?order:null,metadata:{drive_file_id:file.id,drive_url:file.webViewLink??null,drive_modified_time:revision,source_filename:file.name,size:file.size??String(bytes.byteLength)}});if(assetError){await supabase.storage.from("content-assets").remove([storagePath]);throw assetError;}
+    if(existing){const {error:deleteError}=await supabase.from("assets").delete().eq("id",existing.id);if(deleteError)throw deleteError;await supabase.storage.from("content-assets").remove([existing.storage_path]);updated++;}else attached++;
+  }
+  const eventType=updated>0?"drive_images_updated":"drive_images_attached";
+  await supabase.from("activity_events").insert({owner_id:job.owner_id,content_item_id:contentId,event_type:eventType,details:{attached,updated,unchanged,identifier}});
+  await supabase.from("scheduled_jobs").update({status:"succeeded",result:{attached,updated,unchanged,matched:files.length},completed_at:new Date().toISOString()}).eq("id",job.id);return {result:updated>0?"updated":"attached",count:attached+updated};
 }
 
 export async function GET(request:Request){

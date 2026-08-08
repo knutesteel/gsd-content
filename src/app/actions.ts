@@ -239,11 +239,11 @@ export async function generateContent(form: FormData) {
 
   Repeat the Panel / Action / speaker lines for every panel. Include only speakers who appear. For a single image, use "Panel 1" and the same structure.
 - Keep actions direct and concrete. For example, show the person seated with hands behind them while another character approaches a table of pies; do not replace the action with symbols, an empty chair, euphemisms, or safety commentary.
-- The generation_prompt must begin with this exact sentence: "Use the Library documents, GSD image, VOICE, and ICP, etc to create the requested images"
-- After that opening sentence and one blank line, generation_prompt must reproduce the complete Content blueprint verbatim: the single overall Setting line followed by every Panel, Action, and speaker-dialogue line. Do not translate it into an "Image # / Interactions / Conversation" format.
+- The generation_prompt must begin by reproducing the complete Content blueprint verbatim: the single overall Setting line followed by every Panel, Action, and speaker-dialogue line. Do not translate it into an "Image # / Interactions / Conversation" format.
+- After the complete image descriptions and one blank line, generation_prompt must end with this exact sentence: "Use the GSD Voice, Image, and ICP documents for instructions on how to create the images."
 - The stored ChatGPT Library documents are the sole source for character appearance, proportions, wardrobe, palette, recurring props, and drawing style. Do not describe or restate any of those details in generation_prompt.
 - Do not include composition boilerplate, continuity reminders, image dimensions, filenames, hashtags, caption copy, article summaries, explanations, or safety disclaimers in generation_prompt.
-- Except for the required opening sentence, generation_prompt contains only the exact V1-style Content blueprint.`;
+- Except for the required closing sentence, generation_prompt contains only the exact V1-style Content blueprint.`;
     const response=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{authorization:`Bearer ${apiKey}`,"content-type":"application/json"},body:JSON.stringify({model:process.env.OPENAI_MODEL??"gpt-5-mini",input:`${brandContract}\n\n${outputContract}\n\nCURRENT WORKFLOW INSTRUCTIONS\n${typeof workflowInstructions === "string" ? workflowInstructions : ""}\n\nCreate the complete GSD content concept and its final image-generation prompt. Follow the source material without repeating operational instructions in the public-facing content.\n\nSOURCE MATERIAL\n${prompt}`,text:{format:{type:"json_schema",name:"gsd_content",strict:true,schema:{type:"object",additionalProperties:false,properties:{content_type:{type:"string",enum:["Single Image","Carousel"]},panel_count:{type:"integer",minimum:1,maximum:10},score:{type:"number",minimum:0,maximum:100},overview:{type:"string"},content:{type:"string"},caption:{type:"string"},generation_prompt:{type:"string"}},required:["content_type","panel_count","score","overview","content","caption","generation_prompt"]}}}})});
     const body=await response.json() as {output_text?:string;output?:Array<{content?:Array<{type?:string;text?:string}>}>;error?:{message?:string}};
     const outputText=body.output_text??body.output?.flatMap(item=>item.content??[]).find(part=>part.type==="output_text")?.text;
@@ -256,7 +256,7 @@ export async function generateContent(form: FormData) {
     const output = {
       ...parsedOutput,
       content: contentBlueprint,
-      generation_prompt: `Use the Library documents, GSD image, VOICE, and ICP, etc to create the requested images\n\n${contentBlueprint}`,
+      generation_prompt: `${contentBlueprint}\n\nUse the GSD Voice, Image, and ICP documents for instructions on how to create the images.`,
     };
     const {data:item}=await supabase.from("content_items").select("*").eq("id",id).single();
     if(!item||item.record_version!==expectedVersion){await supabase.from("generation_runs").update({status:"succeeded",output,completed_at:new Date().toISOString(),error_message:"Output retained but not promoted because the record changed"}).eq("id",run.id);redirect(`/content/${id}?notice=${encodeURIComponent("Generation completed but was not applied because the item changed. The output remains in Generation Runs.")}`);}

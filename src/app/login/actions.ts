@@ -1,36 +1,29 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
-const adminEmail = () => (process.env.ADMIN_EMAIL ?? "knutesteel@gmail.com").toLowerCase();
-
-function credentials(formData: FormData) {
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
-  const password = String(formData.get("password") ?? "");
-  if (email !== adminEmail() || password.length < 12) redirect("/login?error=invalid");
-  return { email, password };
-}
-
-export async function login(formData: FormData) {
-  const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword(credentials(formData));
-  if (error) redirect(`/login?error=${encodeURIComponent(error.message)}`);
-  redirect("/");
-}
-
-export async function createAdmin(formData: FormData) {
-  const supabase = await createClient();
-  const values = credentials(formData);
+export async function loginWithGoogle() {
   const requestHeaders = await headers();
   const origin = requestHeaders.get("origin") ?? "http://localhost:3000";
-  const { error } = await supabase.auth.signUp({
-    ...values,
-    options: { emailRedirectTo: `${origin}/auth/callback` },
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: `${origin}/auth/callback`,
+      queryParams: {
+        access_type: "offline",
+        prompt: "select_account",
+      },
+    },
   });
-  if (error) redirect(`/login?error=${encodeURIComponent(error.message)}`);
-  redirect("/login?created=1");
+
+  if (error || !data.url) {
+    redirect(`/login?error=${encodeURIComponent(error?.message ?? "google_sign_in_failed")}`);
+  }
+
+  redirect(data.url);
 }
 
 export async function logout() {

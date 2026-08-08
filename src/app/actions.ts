@@ -125,6 +125,31 @@ export async function recordGeneration(form: FormData) {
   redirect(`/content/${id}?notice=${encodeURIComponent(error ? `Generation tracking failed: ${error.message}` : "Generation run recorded and prompt ready to copy")}`);
 }
 
+export async function queueImageGeneration(form: FormData) {
+  const { supabase, user } = await authenticatedClient();
+  const id = textValue(form, "id");
+  const prompt = textValue(form, "prompt");
+  const identifier = textValue(form, "identifier");
+  if (!prompt || !identifier) redirect(`/content/${id}?notice=${encodeURIComponent("Add an image prompt first")}`);
+  const requestedAt = new Date().toISOString();
+  const { error } = await supabase.from("scheduled_jobs").insert({
+    owner_id: user.id,
+    job_type: "drive_image_watch",
+    idempotency_key: crypto.randomUUID(),
+    status: "queued",
+    input: { content_item_id: id, identifier, requested_at: requestedAt, attempts: 0 },
+    run_after: requestedAt,
+  });
+  if (!error) await supabase.from("activity_events").insert({
+    owner_id: user.id,
+    content_item_id: id,
+    event_type: "image_generation_started",
+    details: { destination: "chatgpt", drive_folder: "GSD Auto Assets", identifier },
+  });
+  revalidatePath(`/content/${id}`);
+  redirect(`/content/${id}?notice=${encodeURIComponent(error ? `Image generation handoff failed: ${error.message}` : "Prompt copied and ChatGPT opened. This article is now watching GSD Auto Assets for completed images.")}`);
+}
+
 export async function generateContent(form: FormData) {
   const { supabase, user } = await authenticatedClient();
   const id=textValue(form,"id"); const prompt=textValue(form,"prompt"); const expectedVersion=numberValue(form,"record_version");

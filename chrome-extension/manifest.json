@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "GSD Content → ChatGPT",
+  "version": "1.0.0",
+  "description": "Sends GSD Content image prompts to a new ChatGPT conversation using your signed-in account.",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": ["https://gsd-content.vercel.app/*", "https://chatgpt.com/*"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://gsd-content.vercel.app/*"],
+      "js": ["gsd-content.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://chatgpt.com/*"],
+      "js": ["chatgpt.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

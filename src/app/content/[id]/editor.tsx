@@ -22,9 +22,6 @@ export function Editor({ item }: { item: ContentItem }) {
       <label className="wide">Content<textarea name="content" rows={12} defaultValue={item.content ?? ""} /></label>
       <label className="wide">Caption<textarea name="caption" rows={8} defaultValue={item.caption ?? ""} /></label>
       <label className="wide">Generation Prompt<textarea name="generation_prompt" rows={10} defaultValue={item.generation_prompt ?? ""} /></label>
-      <label className="wide">Instagram URL<input name="instagram_url" type="url" defaultValue={item.instagram_url ?? ""} /></label>
-      <label className="wide">Publishing Notes<textarea name="publishing_notes" rows={4} defaultValue={item.publishing_notes ?? ""} /></label>
-      <label className="wide">Reason for change<input name="reason" placeholder="What changed?" /></label>
     </div>
     <div className="save-row"><button className="primary" disabled={pending}>{pending ? "Saving…" : "Save Changes"}</button>{state.message ? <p data-ok={state.ok}>{state.message}</p> : null}</div>
   </form>;

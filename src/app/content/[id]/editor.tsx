@@ -13,7 +13,12 @@ export function Editor({ item }: { item: ContentItem }) {
     <div className="form-grid">
       <label className="wide">Title<input name="title" defaultValue={item.title ?? ""} /></label>
       <label>Status<select name="status" defaultValue={item.status}><option value="new">New</option><option value="auto_added">Auto-Added</option><option value="generated">Generated</option><option value="posted">Posted</option><option value="archived">Archived</option></select></label>
-      <label>Type<input name="content_type" defaultValue={item.content_type ?? ""} /></label>
+      <label>Type<select name="content_type" defaultValue={item.content_type ?? ""}>
+        <option value="">Select type</option>
+        <option value="Single Pane Cartoon">Single Pane Cartoon</option>
+        <option value="Multi-pane Cartoon">Multi-pane Cartoon</option>
+        <option value="Carousel (seperate images)">Carousel (seperate images)</option>
+      </select></label>
       <label>Panels<input name="panel_count" type="number" min="1" defaultValue={item.panel_count ?? ""} /></label>
       <label>Score<input name="score" type="number" step="0.1" defaultValue={item.score ?? ""} /></label>
       <label>Priority<input name="priority" type="number" defaultValue={item.priority ?? ""} /></label>

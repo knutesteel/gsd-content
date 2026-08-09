@@ -8,3 +8,22 @@
 @media(max-width:760px){.module-grid{grid-template-columns:1fr}.result-table>div{grid-template-columns:1fr}.two-col{grid-template-columns:1fr}.task-list>form{grid-template-columns:1fr}.batch-list a{flex-direction:column}}
 .dashboard-groups{display:grid;gap:28px}.group-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}.group-heading h2{margin:0;font-size:1.35rem}.group-heading span{min-width:34px;padding:6px 10px;border-radius:99px;background:#24221e;color:#fff;text-align:center;font-weight:850}.dashboard-groups .list-head,.dashboard-groups .content-row{grid-template-columns:minmax(320px,1fr) minmax(120px,190px) 70px 70px 100px 150px;gap:16px}.score-value{font-size:1.05rem;color:#a64018}
 @media(max-width:900px){.dashboard-groups .list-head{display:none}.dashboard-groups .content-row{grid-template-columns:1fr auto auto auto}.dashboard-groups .content-main{grid-column:1/-1}.dashboard-groups .row-actions{grid-column:1/-1}}
+
+
+/* V1-style left navigation */
+@media(min-width:901px){
+  .app-shell{padding-left:calc(clamp(18px,4vw,64px) + 220px)}
+  .topbar{position:fixed;z-index:20;top:38px;bottom:0;left:0;width:220px;min-height:0;padding:30px 20px 24px;border-right:1px solid #c8bfad;border-bottom:0;background:#fbf8f0;align-items:stretch;flex-direction:column;justify-content:flex-start}
+  .topbar .brand{padding:0 10px 24px;border-bottom:1px solid #d8d0c3;font-size:1.2rem}
+  .topbar nav{display:flex;min-height:0;flex:1;align-items:stretch;flex-direction:column;justify-content:flex-start;gap:3px;padding-top:20px;flex-wrap:nowrap}
+  .topbar nav a,.topbar nav button{display:block;width:100%;padding:10px;border-radius:6px;text-align:left;font-size:.84rem}
+  .topbar nav a:hover,.topbar nav button:hover{background:#eee7da;color:#a64018}
+  .topbar nav form{margin-top:auto;padding-top:18px;border-top:1px solid #d8d0c3}
+}
+@media(max-width:900px){
+  .topbar{display:block;min-height:auto;padding:18px 0}
+  .topbar .brand{display:block;margin-bottom:14px}
+  .topbar nav{overflow-x:auto;justify-content:flex-start;gap:6px;flex-wrap:nowrap;padding-bottom:4px;-webkit-overflow-scrolling:touch}
+  .topbar nav a,.topbar nav button{display:block;white-space:nowrap}
+  .topbar nav form{flex:0 0 auto}
+}

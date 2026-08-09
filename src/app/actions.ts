@@ -7,6 +7,7 @@ import type { ContentStatus, Json } from "@/types/database";
 
 type ActionResult = { ok: boolean; message: string };
 const statuses = new Set<ContentStatus>(["new", "auto_added", "generated", "posted", "archived"]);
+const contentTypes = new Set(["Single Pane Cartoon", "Multi-pane Cartoon", "Carousel (seperate images)"]);
 
 function textValue(form: FormData, key: string) { return String(form.get(key) ?? "").trim(); }
 function numberValue(form: FormData, key: string) { const value = textValue(form, key); return value === "" ? null : Number(value); }
@@ -64,6 +65,10 @@ export async function saveItem(_previous: ActionResult, form: FormData): Promise
   const { supabase } = await authenticatedClient();
   const status = textValue(form, "status") as ContentStatus;
   if (!statuses.has(status)) return { ok: false, message: "Invalid status" };
+  const contentType = textValue(form, "content_type");
+  if (contentType && !contentTypes.has(contentType)) return { ok: false, message: "Invalid content type" };
+  const panelCount = numberValue(form, "panel_count");
+  if (panelCount !== null && (!Number.isInteger(panelCount) || panelCount < 1 || panelCount > 10)) return { ok: false, message: "Panels must be a whole number from 1 to 10" };
   const expectedVersion = numberValue(form, "record_version");
   if (!expectedVersion) return { ok: false, message: "Missing record version" };
   const id = textValue(form, "id");
@@ -75,8 +80,8 @@ export async function saveItem(_previous: ActionResult, form: FormData): Promise
   if (existingError || !existing) return { ok: false, message: `Save failed: ${existingError?.message ?? "Item not found"}` };
   const args = {
     p_id: id, p_expected_version: expectedVersion,
-    p_title: textValue(form, "title"), p_status: status, p_content_type: textValue(form, "content_type"),
-    p_panel_count: numberValue(form, "panel_count"), p_overview: textValue(form, "overview"),
+    p_title: textValue(form, "title"), p_status: status, p_content_type: contentType,
+    p_panel_count: panelCount, p_overview: textValue(form, "overview"),
     p_content: textValue(form, "content"), p_caption: textValue(form, "caption"),
     p_generation_prompt: textValue(form, "generation_prompt"), p_score: numberValue(form, "score"),
     p_priority: numberValue(form, "priority"), p_is_favorite: form.get("is_favorite") === "on",
@@ -196,7 +201,7 @@ export async function generateContent(form: FormData) {
   const { supabase, user } = await authenticatedClient();
   const id=textValue(form,"id"); let prompt=textValue(form,"prompt"); const expectedVersion=numberValue(form,"record_version");
   if (!expectedVersion) redirect(`/content/${id}?notice=${encodeURIComponent("A current record version is required")}`);
-  const {data:itemBeforeGeneration}=await supabase.from("content_items").select("title").eq("id",id).single();
+  const {data:itemBeforeGeneration}=await supabase.from("content_items").select("title,content_type,panel_count").eq("id",id).single();
   if (!prompt) {
     const {data:sourceLinks}=await supabase.from("content_sources").select("source_id").eq("content_item_id",id);
     const sourceIds=(sourceLinks??[]).map(link=>link.source_id);
@@ -225,8 +230,9 @@ export async function generateContent(form: FormData) {
 - If hashtags are useful, use no more than four in the caption. Do not put hashtags or CTA copy in Content or generation_prompt.`;
     const outputContract = `OUTPUT CONTRACT — NON-NEGOTIABLE
 - Overview must contain exactly two short paragraphs separated by a blank line. Paragraph 1 is a factual 1–2 sentence overview of the news article. Paragraph 2 is a 1–2 sentence GSD take explaining Hank and the squirrel's comedic/productivity angle.
-- Choose content_type as either "Single Image" or "Carousel".
-- Set panel_count to the exact number of visual panels. Use 1 for a single image.
+- Use exactly one of these content_type values: "Single Pane Cartoon", "Multi-pane Cartoon", or "Carousel (seperate images)".
+- "Single Pane Cartoon" always has panel_count 1. "Multi-pane Cartoon" is one image containing multiple panes. "Carousel (seperate images)" uses one separate image per panel.
+- Set panel_count to the exact number of panes or separate carousel images, from 1–10.
 - Score the idea from 0–100 based on GSD brand fit, comedic potential, usefulness, and visual clarity.
 - Caption must be finished, publish-ready Instagram copy—not an image summary. Include the source article URL, then a concise audience question or CTA tied to the workplace issue. Do not narrate the composition or repeat the panel dialogue.
 - Content is the complete creative blueprint and must use this exact V1-style structure:
@@ -244,17 +250,24 @@ export async function generateContent(form: FormData) {
 - The stored ChatGPT Library documents are the sole source for character appearance, proportions, wardrobe, palette, recurring props, and drawing style. Do not describe or restate any of those details in generation_prompt.
 - Do not include composition boilerplate, continuity reminders, image dimensions, filenames, hashtags, caption copy, article summaries, explanations, or safety disclaimers in generation_prompt.
 - Except for the required closing sentence, generation_prompt contains only the exact V1-style Content blueprint.`;
-    const response=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{authorization:`Bearer ${apiKey}`,"content-type":"application/json"},body:JSON.stringify({model:process.env.OPENAI_MODEL??"gpt-5-mini",input:`${brandContract}\n\n${outputContract}\n\nCURRENT WORKFLOW INSTRUCTIONS\n${typeof workflowInstructions === "string" ? workflowInstructions : ""}\n\nCreate the complete GSD content concept and its final image-generation prompt. Follow the source material without repeating operational instructions in the public-facing content.\n\nSOURCE MATERIAL\n${prompt}`,text:{format:{type:"json_schema",name:"gsd_content",strict:true,schema:{type:"object",additionalProperties:false,properties:{content_type:{type:"string",enum:["Single Image","Carousel"]},panel_count:{type:"integer",minimum:1,maximum:10},score:{type:"number",minimum:0,maximum:100},overview:{type:"string"},content:{type:"string"},caption:{type:"string"},generation_prompt:{type:"string"}},required:["content_type","panel_count","score","overview","content","caption","generation_prompt"]}}}})});
+    const savedType = itemBeforeGeneration?.content_type && contentTypes.has(itemBeforeGeneration.content_type) ? itemBeforeGeneration.content_type : null;
+    const savedPanels = itemBeforeGeneration?.panel_count && itemBeforeGeneration.panel_count > 0 ? itemBeforeGeneration.panel_count : null;
+    const savedFormat = savedType || savedPanels
+      ? `\n\nSAVED FORMAT — AUTHORITATIVE\n${savedType ? `The user selected Type "${savedType}". Use it exactly; do not override it.` : ""}${savedType && savedPanels ? "\n" : ""}${savedPanels ? `The user selected Panels ${savedPanels}. Use it exactly; do not override it.` : ""}`
+      : "";
+    const response=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{authorization:`Bearer ${apiKey}`,"content-type":"application/json"},body:JSON.stringify({model:process.env.OPENAI_MODEL??"gpt-5-mini",input:`${brandContract}\n\n${outputContract}${savedFormat}\n\nCURRENT WORKFLOW INSTRUCTIONS\n${typeof workflowInstructions === "string" ? workflowInstructions : ""}\n\nCreate the complete GSD content concept and its final image-generation prompt. Follow the source material without repeating operational instructions in the public-facing content.\n\nSOURCE MATERIAL\n${prompt}`,text:{format:{type:"json_schema",name:"gsd_content",strict:true,schema:{type:"object",additionalProperties:false,properties:{content_type:{type:"string",enum:["Single Pane Cartoon","Multi-pane Cartoon","Carousel (seperate images)"]},panel_count:{type:"integer",minimum:1,maximum:10},score:{type:"number",minimum:0,maximum:100},overview:{type:"string"},content:{type:"string"},caption:{type:"string"},generation_prompt:{type:"string"}},required:["content_type","panel_count","score","overview","content","caption","generation_prompt"]}}}})});
     const body=await response.json() as {output_text?:string;output?:Array<{content?:Array<{type?:string;text?:string}>}>;error?:{message?:string}};
     const outputText=body.output_text??body.output?.flatMap(item=>item.content??[]).find(part=>part.type==="output_text")?.text;
     if(!response.ok||!outputText) throw new Error(body.error?.message??`OpenAI returned HTTP ${response.status} without structured output`);
-    const parsedOutput=JSON.parse(outputText) as {content_type:"Single Image"|"Carousel";panel_count:number;score:number;overview:string;content:string;caption:string;generation_prompt:string};
+    const parsedOutput=JSON.parse(outputText) as {content_type:"Single Pane Cartoon"|"Multi-pane Cartoon"|"Carousel (seperate images)";panel_count:number;score:number;overview:string;content:string;caption:string;generation_prompt:string};
     const contentBlueprint = parsedOutput.content.trim();
     if (!/^Setting:\s*.+/m.test(contentBlueprint) || !/^Panel 1(?:\s+—.*)?$/m.test(contentBlueprint) || !/^Action:\s*.+/m.test(contentBlueprint)) {
       throw new Error("Generation did not return the required V1 Setting / Panel / Action structure. Please try again.");
     }
     const output = {
       ...parsedOutput,
+      content_type: savedType ?? parsedOutput.content_type,
+      panel_count: savedPanels ?? parsedOutput.panel_count,
       content: contentBlueprint,
       generation_prompt: `${contentBlueprint}\n\nUse the GSD Voice, Image, and ICP documents for instructions on how to create the images.`,
     };

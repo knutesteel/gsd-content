@@ -3,6 +3,7 @@ import { logout } from "@/app/login/actions";
 
 const links = [
   ["/instructions", "Instructions"], ["/", "Dashboard"], ["/discover", "Discover"],
+  ["/instagram-insights", "Instagram Insights"], ["/content-plan", "Content Plan"],
   ["/metrics", "Metrics & Export"], ["/collaborations", "Collaborations"], ["/channels", "Channels"],
   ["/retail", "Retail Plan"], ["/online-sales", "Online Sales"], ["/jobs", "Scheduled Jobs"],
   ["/?status=archived", "Archive"],

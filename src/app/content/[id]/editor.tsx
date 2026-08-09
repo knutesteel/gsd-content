@@ -1,15 +1,54 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { saveItem } from "@/app/actions";
 import type { ContentItem } from "@/types/database";
 
-const initialState = { ok: false, message: "" };
+const initialState: { ok: boolean; message: string; version?: number } = { ok: false, message: "" };
 
 export function Editor({ item }: { item: ContentItem }) {
   const [state, action, pending] = useActionState(saveItem, initialState);
-  return <form action={action} className="editor">
-    <input type="hidden" name="id" value={item.id} /><input type="hidden" name="record_version" value={item.record_version} />
+  const formRef = useRef<HTMLFormElement>(null);
+  const versionRef = useRef<HTMLInputElement>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dirtyRef = useRef(false);
+  const pendingRef = useRef(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  function scheduleSave(delay = 800) {
+    dirtyRef.current = true;
+    setHasUnsavedChanges(true);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      if (pendingRef.current) return;
+      dirtyRef.current = false;
+      setHasUnsavedChanges(false);
+      formRef.current?.requestSubmit();
+    }, delay);
+  }
+
+  useEffect(() => {
+    pendingRef.current = pending;
+    if (pending) return;
+
+    if (state.ok && state.version && versionRef.current) {
+      versionRef.current.value = String(state.version);
+    }
+    if (dirtyRef.current) {
+      timerRef.current = setTimeout(() => {
+        dirtyRef.current = false;
+        setHasUnsavedChanges(false);
+        formRef.current?.requestSubmit();
+      }, 0);
+    }
+  }, [pending, state]);
+
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+  }, []);
+
+  return <form ref={formRef} action={action} className="editor" onInput={() => scheduleSave()} onChange={() => scheduleSave()}>
+    <input type="hidden" name="id" value={item.id} /><input ref={versionRef} type="hidden" name="record_version" defaultValue={item.record_version} />
     <div className="form-grid">
       <label className="wide">Title<input name="title" defaultValue={item.title ?? ""} /></label>
       <label>Status<select name="status" defaultValue={item.status}><option value="new">New</option><option value="auto_added">Auto-Added</option><option value="generated">Generated</option><option value="posted">Posted</option><option value="archived">Archived</option></select></label>
@@ -28,6 +67,8 @@ export function Editor({ item }: { item: ContentItem }) {
       <label className="wide">Caption<textarea name="caption" rows={8} defaultValue={item.caption ?? ""} /></label>
       <label className="wide">Generation Prompt<textarea name="generation_prompt" rows={10} defaultValue={item.generation_prompt ?? ""} /></label>
     </div>
-    <div className="save-row"><button className="primary" disabled={pending}>{pending ? "Saving…" : "Save Changes"}</button>{state.message ? <p data-ok={state.ok}>{state.message}</p> : null}</div>
+    <div className="save-row"><p className="autosave-status" data-ok={state.ok && !hasUnsavedChanges && !pending}>
+      {pending ? "Saving…" : hasUnsavedChanges ? "Unsaved changes" : state.message || "All changes saved"}
+    </p></div>
   </form>;
 }

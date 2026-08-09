@@ -5,7 +5,7 @@ import { redirect, unstable_rethrow } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { ContentStatus, Json } from "@/types/database";
 
-type ActionResult = { ok: boolean; message: string };
+type ActionResult = { ok: boolean; message: string; version?: number };
 const statuses = new Set<ContentStatus>(["new", "auto_added", "generated", "posted", "archived"]);
 const contentTypes = new Set(["Single Pane Cartoon", "Multi-pane Cartoon", "Carousel (seperate images)"]);
 
@@ -93,7 +93,12 @@ export async function saveItem(_previous: ActionResult, form: FormData): Promise
   const result = resultObject(data);
   if (result.result !== "saved") return { ok: false, message: String(result.reason ?? "Save failed") };
   revalidatePath("/"); revalidatePath(`/content/${args.p_id}`);
-  return { ok: true, message: `Saved version ${String(result.version)}` };
+  const version = typeof result.version === "number" ? result.version : Number(result.version);
+  return {
+    ok: true,
+    message: "All changes saved",
+    version: Number.isFinite(version) ? version : undefined,
+  };
 }
 
 export async function quickStatus(form: FormData) {
@@ -199,9 +204,48 @@ export async function importLegacyImages(form: FormData) {
 
 export async function generateContent(form: FormData) {
   const { supabase, user } = await authenticatedClient();
-  const id=textValue(form,"id"); let prompt=textValue(form,"prompt"); const expectedVersion=numberValue(form,"record_version");
-  if (!expectedVersion) redirect(`/content/${id}?notice=${encodeURIComponent("A current record version is required")}`);
-  const {data:itemBeforeGeneration}=await supabase.from("content_items").select("title,content_type,panel_count").eq("id",id).single();
+  const id=textValue(form,"id"); let prompt=textValue(form,"prompt");
+  const {data:itemBeforeGeneration}=await supabase.from("content_items").select("*").eq("id",id).single();
+  if (!itemBeforeGeneration) redirect(`/content/${id}?notice=${encodeURIComponent("Item not found")}`);
+
+  // Content edited in the Content Creation screen is authoritative. Once a
+  // blueprint exists, this action must never send it back through the model or
+  // replace it with a newly generated draft. Build the image prompt directly
+  // from the latest saved Content instead.
+  const savedContent = itemBeforeGeneration.content?.trim() ?? "";
+  if (savedContent) {
+    if (!/^Setting:\s*.+/m.test(savedContent) || !/^Panel 1(?:\s+—.*)?$/m.test(savedContent) || !/^Action:\s*.+/m.test(savedContent)) {
+      redirect(`/content/${id}?notice=${encodeURIComponent("Content must include Setting, Panel 1, and Action before the image prompt can be created")}`);
+    }
+    const imagePrompt = `${savedContent}\n\nUse the GSD Voice, Image, and ICP documents for instructions on how to create the images.`;
+    const { data: saved, error: saveError } = await supabase.rpc("save_content_item", {
+      p_id: id,
+      p_expected_version: itemBeforeGeneration.record_version,
+      p_title: itemBeforeGeneration.title ?? "",
+      p_status: "generated",
+      p_content_type: itemBeforeGeneration.content_type ?? "",
+      p_panel_count: itemBeforeGeneration.panel_count,
+      p_overview: itemBeforeGeneration.overview ?? "",
+      p_content: itemBeforeGeneration.content ?? "",
+      p_caption: itemBeforeGeneration.caption ?? "",
+      p_generation_prompt: imagePrompt,
+      p_score: itemBeforeGeneration.score,
+      p_priority: itemBeforeGeneration.priority,
+      p_is_favorite: itemBeforeGeneration.is_favorite,
+      p_instagram_url: itemBeforeGeneration.instagram_url ?? "",
+      p_publishing_notes: itemBeforeGeneration.publishing_notes ?? "",
+      p_reason: "Image prompt rebuilt from edited Content",
+    });
+    const savedObject = resultObject(saved as Json);
+    if (saveError || savedObject.result !== "saved") {
+      redirect(`/content/${id}?notice=${encodeURIComponent(saveError?.message ?? String(savedObject.reason ?? "Could not create prompt from Content"))}`);
+    }
+    revalidatePath("/");
+    revalidatePath(`/content/${id}`);
+    redirect(`/content/${id}?notice=${encodeURIComponent("Prompt updated from the saved Content. Content was preserved.")}`);
+  }
+
+  const expectedVersion=itemBeforeGeneration.record_version;
   if (!prompt) {
     const {data:sourceLinks}=await supabase.from("content_sources").select("source_id").eq("content_item_id",id);
     const sourceIds=(sourceLinks??[]).map(link=>link.source_id);

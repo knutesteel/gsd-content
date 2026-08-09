@@ -15,7 +15,7 @@ export function Editor({ item }: { item: ContentItem }) {
   const pendingRef = useRef(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
-  function scheduleSave(delay = 800) {
+  function scheduleSave(delay = 3000) {
     dirtyRef.current = true;
     setHasUnsavedChanges(true);
     if (timerRef.current) clearTimeout(timerRef.current);

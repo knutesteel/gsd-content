@@ -208,16 +208,49 @@ export async function generateContent(form: FormData) {
   const {data:itemBeforeGeneration}=await supabase.from("content_items").select("*").eq("id",id).single();
   if (!itemBeforeGeneration) redirect(`/content/${id}?notice=${encodeURIComponent("Item not found")}`);
 
-  // Content edited in the Content Creation screen is authoritative. Once a
-  // blueprint exists, this action must never send it back through the model or
-  // replace it with a newly generated draft. Build the image prompt directly
-  // from the latest saved Content instead.
+  // Content edited in the Content Creation screen is authoritative. Once it
+  // exists, use AI only to interpret it into an image prompt for the saved
+  // Type/quantity. Never replace the user's Content with the interpretation.
   const savedContent = itemBeforeGeneration.content?.trim() ?? "";
   if (savedContent) {
-    if (!/^Setting:\s*.+/m.test(savedContent) || !/^Panel 1(?:\s+—.*)?$/m.test(savedContent) || !/^Action:\s*.+/m.test(savedContent)) {
-      redirect(`/content/${id}?notice=${encodeURIComponent("Content must include Setting, Panel 1, and Action before the image prompt can be created")}`);
-    }
-    const imagePrompt = `${savedContent}\n\nUse the GSD Voice, Image, and ICP documents for instructions on how to create the images.`;
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) redirect(`/content/${id}?notice=${encodeURIComponent("AI prompt creation is ready but the server API key is not configured")}`);
+    const savedType = itemBeforeGeneration.content_type && contentTypes.has(itemBeforeGeneration.content_type)
+      ? itemBeforeGeneration.content_type
+      : "Single Pane Cartoon";
+    const savedPanels = itemBeforeGeneration.panel_count && itemBeforeGeneration.panel_count > 0
+      ? itemBeforeGeneration.panel_count
+      : 1;
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        model: process.env.OPENAI_MODEL ?? "gpt-5-mini",
+        input: `Interpret the user's Content as an image-creation brief.
+
+The Content may be free-form notes, prose, dialogue, or a structured draft. Do not require specific headings or formatting. Preserve its intent, setting, interactions, jokes, and speech. Do not rewrite or return the Content field itself.
+
+Authoritative format:
+Type: ${savedType}
+Quantity: ${savedPanels}
+
+For "Single Pane Cartoon", create one image description. For "Multi-pane Cartoon", create one cartoon containing exactly ${savedPanels} panes. For "Carousel (seperate images)", create exactly ${savedPanels} separate image descriptions. Include only scene-specific setting, interactions/actions, and exact speech. Do not add character appearance or drawing-style instructions.
+
+End the prompt with this exact sentence:
+Use the GSD Voice, Image, and ICP documents for instructions on how to create the images.
+
+USER CONTENT
+${savedContent}`,
+        text: { format: { type: "json_schema", name: "image_prompt", strict: true, schema: { type: "object", additionalProperties: false, properties: { generation_prompt: { type: "string" } }, required: ["generation_prompt"] } } },
+      }),
+    });
+    const body = await response.json() as { output_text?: string; output?: Array<{ content?: Array<{ type?: string; text?: string }> }>; error?: { message?: string } };
+    const outputText = body.output_text ?? body.output?.flatMap((entry) => entry.content ?? []).find((part) => part.type === "output_text")?.text;
+    if (!response.ok || !outputText) redirect(`/content/${id}?notice=${encodeURIComponent(body.error?.message ?? "AI could not interpret the Content")}`);
+    const interpreted = JSON.parse(outputText) as { generation_prompt: string };
+    const closingInstruction = "Use the GSD Voice, Image, and ICP documents for instructions on how to create the images.";
+    const promptBody = interpreted.generation_prompt.trim().replace(new RegExp(`\\n*${closingInstruction.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}$`), "").trim();
+    const imagePrompt = `${promptBody}\n\n${closingInstruction}`;
     const { data: saved, error: saveError } = await supabase.rpc("save_content_item", {
       p_id: id,
       p_expected_version: itemBeforeGeneration.record_version,
@@ -234,7 +267,7 @@ export async function generateContent(form: FormData) {
       p_is_favorite: itemBeforeGeneration.is_favorite,
       p_instagram_url: itemBeforeGeneration.instagram_url ?? "",
       p_publishing_notes: itemBeforeGeneration.publishing_notes ?? "",
-      p_reason: "Image prompt rebuilt from edited Content",
+      p_reason: "Image prompt interpreted from edited Content using saved Type and quantity",
     });
     const savedObject = resultObject(saved as Json);
     if (saveError || savedObject.result !== "saved") {
@@ -242,7 +275,7 @@ export async function generateContent(form: FormData) {
     }
     revalidatePath("/");
     revalidatePath(`/content/${id}`);
-    redirect(`/content/${id}?notice=${encodeURIComponent("Prompt updated from the saved Content. Content was preserved.")}`);
+    redirect(`/content/${id}?notice=${encodeURIComponent("Prompt interpreted from the saved Content using its Type and quantity. Content was preserved.")}`);
   }
 
   const expectedVersion=itemBeforeGeneration.record_version;
@@ -305,9 +338,6 @@ export async function generateContent(form: FormData) {
     if(!response.ok||!outputText) throw new Error(body.error?.message??`OpenAI returned HTTP ${response.status} without structured output`);
     const parsedOutput=JSON.parse(outputText) as {content_type:"Single Pane Cartoon"|"Multi-pane Cartoon"|"Carousel (seperate images)";panel_count:number;score:number;overview:string;content:string;caption:string;generation_prompt:string};
     const contentBlueprint = parsedOutput.content.trim();
-    if (!/^Setting:\s*.+/m.test(contentBlueprint) || !/^Panel 1(?:\s+—.*)?$/m.test(contentBlueprint) || !/^Action:\s*.+/m.test(contentBlueprint)) {
-      throw new Error("Generation did not return the required V1 Setting / Panel / Action structure. Please try again.");
-    }
     const output = {
       ...parsedOutput,
       content_type: savedType ?? parsedOutput.content_type,

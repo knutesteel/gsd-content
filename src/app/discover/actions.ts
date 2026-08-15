@@ -63,7 +63,7 @@ export async function discoverUrls(form: FormData) {
       const itemId = typeof itemResult === "object" && itemResult && !Array.isArray(itemResult) && typeof itemResult.id === "string" ? itemResult.id : null;
       if (!itemId || itemError) throw new Error(itemError?.message ?? "Could not create content item");
       await supabase.from("content_sources").insert({owner_id:user.id,content_item_id:itemId,source_id:source.id});
-      await supabase.from("content_items").update({status:"auto_added",content_type:format.content_type,panel_count:format.panel_count,overview:meta.summary,generation_prompt:`Create a Hank and the Squirrel Instagram post based on this source: ${canonical}\n\nSource description: ${meta.summary ?? meta.title}\n\nFull article text:\n${fullText || meta.summary || meta.title}`}).eq("id",itemId);
+      await supabase.from("content_items").update({status:"auto_added",content_type:format.content_type,panel_count:format.panel_count,overview:meta.summary,first_comment:canonical,generation_prompt:`Create a Hank and the Squirrel Instagram post based on this source: ${canonical}\n\nSource description: ${meta.summary ?? meta.title}\n\nFull article text:\n${fullText || meta.summary || meta.title}`}).eq("id",itemId);
       created++; await supabase.from("discovery_results").insert({owner_id:user.id,batch_id:batch.id,submitted_url:raw,canonical_url:canonical,status:"created",source_id:source.id,content_item_id:itemId,reason:"Source and content item created"});
     } catch (error) { failed++; await supabase.from("discovery_results").insert({owner_id:user.id,batch_id:batch.id,submitted_url:raw,status:"failed",reason:error instanceof Error?error.message:"Unknown error"}); }
   }

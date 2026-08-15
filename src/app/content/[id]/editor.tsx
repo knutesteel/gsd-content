@@ -65,6 +65,7 @@ export function Editor({ item }: { item: ContentItem }) {
       <label className="wide">Overview<textarea name="overview" rows={5} defaultValue={item.overview ?? ""} /></label>
       <label className="wide">Content<textarea name="content" rows={12} defaultValue={item.content ?? ""} /></label>
       <label className="wide">Caption<textarea name="caption" rows={8} defaultValue={item.caption ?? ""} /></label>
+      <label className="wide">First Comment<textarea name="first_comment" rows={3} defaultValue={item.first_comment ?? ""} /></label>
       <label className="wide">Generation Prompt<textarea name="generation_prompt" rows={10} defaultValue={item.generation_prompt ?? ""} /></label>
     </div>
     <div className="save-row"><p className="autosave-status" data-ok={state.ok && !hasUnsavedChanges && !pending}>

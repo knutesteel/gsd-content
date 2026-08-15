@@ -221,6 +221,12 @@ export async function generateContent(form: FormData) {
     const savedPanels = itemBeforeGeneration.panel_count && itemBeforeGeneration.panel_count > 0
       ? itemBeforeGeneration.panel_count
       : 1;
+    const { data: sourceLinks } = await supabase.from("content_sources").select("source_id").eq("content_item_id", id);
+    const sourceIds = (sourceLinks ?? []).map((link) => link.source_id);
+    const { data: linkedSources } = sourceIds.length
+      ? await supabase.from("sources").select("canonical_url").in("id", sourceIds)
+      : { data: [] };
+    const sourceUrls = (linkedSources ?? []).map((source) => source.canonical_url).filter(Boolean);
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
@@ -229,6 +235,8 @@ export async function generateContent(form: FormData) {
         input: `Interpret the user's Content as an image-creation brief.
 
 The Content may be free-form notes, prose, dialogue, or a structured draft. Do not require specific headings or formatting. Preserve its intent, setting, interactions, jokes, and speech. Do not rewrite or return the Content field itself.
+
+Also create a finished, publish-ready Instagram caption that matches the GSD Voice. It should be sharp, funny, conversational, and tied to the workplace or productivity angle in the Content. Do not summarize the image composition or repeat the dialogue. Include a concise audience question or call to action. If source URLs are provided, include the primary source URL.
 
 Authoritative format:
 Type: ${savedType}
@@ -240,14 +248,17 @@ End the prompt with this exact sentence:
 Use the GSD Voice, Image, and ICP documents for instructions on how to create the images.
 
 USER CONTENT
-${savedContent}`,
-        text: { format: { type: "json_schema", name: "image_prompt", strict: true, schema: { type: "object", additionalProperties: false, properties: { generation_prompt: { type: "string" } }, required: ["generation_prompt"] } } },
+${savedContent}
+
+SOURCE URLS
+${sourceUrls.length ? sourceUrls.join("\n") : "None provided"}`,
+        text: { format: { type: "json_schema", name: "image_prompt_and_caption", strict: true, schema: { type: "object", additionalProperties: false, properties: { generation_prompt: { type: "string" }, caption: { type: "string" } }, required: ["generation_prompt", "caption"] } } },
       }),
     });
     const body = await response.json() as { output_text?: string; output?: Array<{ content?: Array<{ type?: string; text?: string }> }>; error?: { message?: string } };
     const outputText = body.output_text ?? body.output?.flatMap((entry) => entry.content ?? []).find((part) => part.type === "output_text")?.text;
     if (!response.ok || !outputText) redirect(`/content/${id}?notice=${encodeURIComponent(body.error?.message ?? "AI could not interpret the Content")}`);
-    const interpreted = JSON.parse(outputText) as { generation_prompt: string };
+    const interpreted = JSON.parse(outputText) as { generation_prompt: string; caption: string };
     const closingInstruction = "Use the GSD Voice, Image, and ICP documents for instructions on how to create the images.";
     const promptBody = interpreted.generation_prompt.trim().replace(new RegExp(`\\n*${closingInstruction.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}$`), "").trim();
     const imagePrompt = `${promptBody}\n\n${closingInstruction}`;
@@ -260,14 +271,14 @@ ${savedContent}`,
       p_panel_count: itemBeforeGeneration.panel_count,
       p_overview: itemBeforeGeneration.overview ?? "",
       p_content: itemBeforeGeneration.content ?? "",
-      p_caption: itemBeforeGeneration.caption ?? "",
+      p_caption: interpreted.caption.trim(),
       p_generation_prompt: imagePrompt,
       p_score: itemBeforeGeneration.score,
       p_priority: itemBeforeGeneration.priority,
       p_is_favorite: itemBeforeGeneration.is_favorite,
       p_instagram_url: itemBeforeGeneration.instagram_url ?? "",
       p_publishing_notes: itemBeforeGeneration.publishing_notes ?? "",
-      p_reason: "Image prompt interpreted from edited Content using saved Type and quantity",
+      p_reason: "Image prompt and GSD Voice caption generated from edited Content using saved Type and quantity",
     });
     const savedObject = resultObject(saved as Json);
     if (saveError || savedObject.result !== "saved") {
@@ -275,7 +286,7 @@ ${savedContent}`,
     }
     revalidatePath("/");
     revalidatePath(`/content/${id}`);
-    redirect(`/content/${id}?notice=${encodeURIComponent("Prompt interpreted from the saved Content using its Type and quantity. Content was preserved.")}`);
+    redirect(`/content/${id}?notice=${encodeURIComponent("Prompt and GSD Voice Instagram caption generated from the saved Content. Content was preserved.")}`);
   }
 
   const expectedVersion=itemBeforeGeneration.record_version;
@@ -311,7 +322,7 @@ ${savedContent}`,
 - "Single Pane Cartoon" always has panel_count 1. "Multi-pane Cartoon" is one image containing multiple panes. "Carousel (seperate images)" uses one separate image per panel.
 - Set panel_count to the exact number of panes or separate carousel images, from 1–10.
 - Score the idea from 0–100 based on GSD brand fit, comedic potential, usefulness, and visual clarity.
-- Caption must be finished, publish-ready Instagram copy—not an image summary. Include the source article URL, then a concise audience question or CTA tied to the workplace issue. Do not narrate the composition or repeat the panel dialogue.
+- Caption must be finished, publish-ready Instagram copy that matches the GSD Voice—not an image summary. Make it sharp, funny, conversational, and tied to the workplace or productivity angle. Include the source article URL, then a concise audience question or CTA tied to the workplace issue. Do not narrate the composition or repeat the panel dialogue.
 - Content is the complete creative blueprint and must use this exact V1-style structure:
   Setting: [one overall location for the full post]
 

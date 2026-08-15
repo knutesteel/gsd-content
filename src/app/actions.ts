@@ -12,6 +12,11 @@ const contentTypes = new Set(["Single Pane Cartoon", "Multi-pane Cartoon", "Caro
 function textValue(form: FormData, key: string) { return String(form.get(key) ?? "").trim(); }
 function numberValue(form: FormData, key: string) { const value = textValue(form, key); return value === "" ? null : Number(value); }
 function resultObject(value: Json): Record<string, Json | undefined> { return typeof value === "object" && value !== null && !Array.isArray(value) ? value : {}; }
+const firstCommentCaptionClose = "Read the article in the first Comment";
+function finalizeInstagramCaption(value: string, hasArticleUrl: boolean) {
+  const withoutClose = value.trim().replace(/\s*Read the article in the first Comment\.?\s*$/i, "").trim();
+  return hasArticleUrl ? `${withoutClose}\n\n${firstCommentCaptionClose}` : withoutClose;
+}
 
 async function authenticatedClient() {
   const supabase = await createClient();
@@ -83,7 +88,7 @@ export async function saveItem(_previous: ActionResult, form: FormData): Promise
     p_title: textValue(form, "title"), p_status: status, p_content_type: contentType,
     p_panel_count: panelCount, p_overview: textValue(form, "overview"),
     p_content: textValue(form, "content"), p_caption: textValue(form, "caption"),
-    p_generation_prompt: textValue(form, "generation_prompt"), p_score: numberValue(form, "score"),
+    p_first_comment: textValue(form, "first_comment"), p_generation_prompt: textValue(form, "generation_prompt"), p_score: numberValue(form, "score"),
     p_priority: numberValue(form, "priority"), p_is_favorite: form.get("is_favorite") === "on",
     p_instagram_url: existing.instagram_url ?? "", p_publishing_notes: existing.publishing_notes ?? "",
     p_reason: "Content edited",
@@ -122,7 +127,7 @@ export async function quickStatus(form: FormData) {
   const { data, error } = await supabase.rpc("save_content_item", {
     p_id: item.id, p_expected_version: item.record_version, p_title: item.title ?? "", p_status: status,
     p_content_type: item.content_type ?? "", p_panel_count: item.panel_count, p_overview: item.overview ?? "",
-    p_content: item.content ?? "", p_caption: item.caption ?? "", p_generation_prompt: item.generation_prompt ?? "",
+    p_content: item.content ?? "", p_caption: item.caption ?? "", p_first_comment: item.first_comment ?? "", p_generation_prompt: item.generation_prompt ?? "",
     p_score: item.score, p_priority: item.priority, p_is_favorite: item.is_favorite,
     p_instagram_url: item.instagram_url ?? "", p_publishing_notes: item.publishing_notes ?? "",
     p_reason: status === "archived" ? "Archived from dashboard" : "Status changed from dashboard",
@@ -236,7 +241,7 @@ export async function generateContent(form: FormData) {
 
 The Content may be free-form notes, prose, dialogue, or a structured draft. Do not require specific headings or formatting. Preserve its intent, setting, interactions, jokes, and speech. Do not rewrite or return the Content field itself.
 
-Also create a finished, publish-ready Instagram caption that matches the GSD Voice. It should be sharp, funny, conversational, and tied to the workplace or productivity angle in the Content. Do not summarize the image composition or repeat the dialogue. Include a concise audience question or call to action. If source URLs are provided, include the primary source URL.
+Also create a finished, publish-ready Instagram caption that matches the GSD Voice. It should be sharp, funny, conversational, and tied to the workplace or productivity angle in the Content. Do not summarize the image composition or repeat the dialogue. Include a concise audience question or call to action. Do not include the article URL in the caption. If source URLs are provided, end the caption with this exact sentence: "Read the article in the first Comment".
 
 Authoritative format:
 Type: ${savedType}
@@ -262,6 +267,8 @@ ${sourceUrls.length ? sourceUrls.join("\n") : "None provided"}`,
     const closingInstruction = "Use the GSD Voice, Image, and ICP documents for instructions on how to create the images.";
     const promptBody = interpreted.generation_prompt.trim().replace(new RegExp(`\\n*${closingInstruction.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}$`), "").trim();
     const imagePrompt = `${promptBody}\n\n${closingInstruction}`;
+    const primarySourceUrl = sourceUrls[0] ?? "";
+    const instagramCaption = finalizeInstagramCaption(interpreted.caption, Boolean(primarySourceUrl));
     const { data: saved, error: saveError } = await supabase.rpc("save_content_item", {
       p_id: id,
       p_expected_version: itemBeforeGeneration.record_version,
@@ -271,7 +278,8 @@ ${sourceUrls.length ? sourceUrls.join("\n") : "None provided"}`,
       p_panel_count: itemBeforeGeneration.panel_count,
       p_overview: itemBeforeGeneration.overview ?? "",
       p_content: itemBeforeGeneration.content ?? "",
-      p_caption: interpreted.caption.trim(),
+      p_caption: instagramCaption,
+      p_first_comment: primarySourceUrl,
       p_generation_prompt: imagePrompt,
       p_score: itemBeforeGeneration.score,
       p_priority: itemBeforeGeneration.priority,
@@ -322,7 +330,8 @@ ${sourceUrls.length ? sourceUrls.join("\n") : "None provided"}`,
 - "Single Pane Cartoon" always has panel_count 1. "Multi-pane Cartoon" is one image containing multiple panes. "Carousel (seperate images)" uses one separate image per panel.
 - Set panel_count to the exact number of panes or separate carousel images, from 1–10.
 - Score the idea from 0–100 based on GSD brand fit, comedic potential, usefulness, and visual clarity.
-- Caption must be finished, publish-ready Instagram copy that matches the GSD Voice—not an image summary. Make it sharp, funny, conversational, and tied to the workplace or productivity angle. Include the source article URL, then a concise audience question or CTA tied to the workplace issue. Do not narrate the composition or repeat the panel dialogue.
+- Caption must be finished, publish-ready Instagram copy that matches the GSD Voice—not an image summary. Make it sharp, funny, conversational, and tied to the workplace or productivity angle. Include a concise audience question or CTA tied to the workplace issue. Do not narrate the composition or repeat the panel dialogue.
+- When the item has a source article URL, do not include the URL itself in Caption. End Caption with this exact sentence: "Read the article in the first Comment". The URL is stored separately in First Comment.
 - Content is the complete creative blueprint and must use this exact V1-style structure:
   Setting: [one overall location for the full post]
 
@@ -349,16 +358,24 @@ ${sourceUrls.length ? sourceUrls.join("\n") : "None provided"}`,
     if(!response.ok||!outputText) throw new Error(body.error?.message??`OpenAI returned HTTP ${response.status} without structured output`);
     const parsedOutput=JSON.parse(outputText) as {content_type:"Single Pane Cartoon"|"Multi-pane Cartoon"|"Carousel (seperate images)";panel_count:number;score:number;overview:string;content:string;caption:string;generation_prompt:string};
     const contentBlueprint = parsedOutput.content.trim();
+    const { data: outputSourceLinks } = await supabase.from("content_sources").select("source_id").eq("content_item_id", id);
+    const outputSourceIds = (outputSourceLinks ?? []).map((link) => link.source_id);
+    const { data: outputSources } = outputSourceIds.length
+      ? await supabase.from("sources").select("canonical_url").in("id", outputSourceIds)
+      : { data: [] };
+    const primarySourceUrl = outputSources?.[0]?.canonical_url ?? "";
     const output = {
       ...parsedOutput,
       content_type: savedType ?? parsedOutput.content_type,
       panel_count: savedPanels ?? parsedOutput.panel_count,
       content: contentBlueprint,
+      caption: finalizeInstagramCaption(parsedOutput.caption, Boolean(primarySourceUrl)),
+      first_comment: primarySourceUrl,
       generation_prompt: `${contentBlueprint}\n\nUse the GSD Voice, Image, and ICP documents for instructions on how to create the images.`,
     };
     const {data:item}=await supabase.from("content_items").select("*").eq("id",id).single();
     if(!item||item.record_version!==expectedVersion){await supabase.from("generation_runs").update({status:"succeeded",output,completed_at:new Date().toISOString(),error_message:"Output retained but not promoted because the record changed"}).eq("id",run.id);redirect(`/content/${id}?notice=${encodeURIComponent("Generation completed but was not applied because the item changed. The output remains in Generation Runs.")}`);}
-    const {data:saved,error:saveError}=await supabase.rpc("save_content_item",{p_id:id,p_expected_version:expectedVersion,p_title:item.title??"",p_status:"generated",p_content_type:output.content_type,p_panel_count:output.panel_count,p_overview:output.overview,p_content:output.content,p_caption:output.caption,p_generation_prompt:output.generation_prompt,p_score:output.score,p_priority:item.priority,p_is_favorite:item.is_favorite,p_instagram_url:item.instagram_url??"",p_publishing_notes:item.publishing_notes??"",p_reason:"AI generation promoted"});
+    const {data:saved,error:saveError}=await supabase.rpc("save_content_item",{p_id:id,p_expected_version:expectedVersion,p_title:item.title??"",p_status:"generated",p_content_type:output.content_type,p_panel_count:output.panel_count,p_overview:output.overview,p_content:output.content,p_caption:output.caption,p_first_comment:output.first_comment,p_generation_prompt:output.generation_prompt,p_score:output.score,p_priority:item.priority,p_is_favorite:item.is_favorite,p_instagram_url:item.instagram_url??"",p_publishing_notes:item.publishing_notes??"",p_reason:"AI generation promoted"});
     const savedObject=resultObject(saved as Json); if(saveError||savedObject.result!=="saved") throw new Error(saveError?.message??String(savedObject.reason??"Could not promote output"));
     await supabase.from("generation_runs").update({status:"succeeded",output,promoted_at:new Date().toISOString(),completed_at:new Date().toISOString()}).eq("id",run.id);
     revalidatePath("/"); revalidatePath(`/content/${id}`); redirect(`/content/${id}?notice=${encodeURIComponent("Content generated and saved as a new version")}`);

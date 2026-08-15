@@ -234,7 +234,7 @@ Authoritative format:
 Type: ${savedType}
 Quantity: ${savedPanels}
 
-For "Single Pane Cartoon", create one image description. For "Multi-pane Cartoon", create one cartoon containing exactly ${savedPanels} panes. For "Carousel (seperate images)", create exactly ${savedPanels} separate image descriptions. Include only scene-specific setting, interactions/actions, and exact speech. Do not add character appearance or drawing-style instructions.
+For "Single Pane Cartoon", create one image description. For "Multi-pane Cartoon", create one cartoon containing exactly ${savedPanels} panes. For "Carousel (seperate images)", create exactly ${savedPanels} separate image descriptions. Every image or pane must include both Hank and the squirrel in accordance with the GSD guidelines. Add other characters whenever the scene or story requires them. Include only scene-specific setting, interactions/actions, and exact speech. Do not add character appearance or drawing-style instructions.
 
 End the prompt with this exact sentence:
 Use the GSD Voice, Image, and ICP documents for instructions on how to create the images.
@@ -321,7 +321,7 @@ ${savedContent}`,
   the squirrel: “[exact dialogue]”
 
   Repeat the Panel / Action / speaker lines for every panel. Include only speakers who appear. For a single image, use "Panel 1" and the same structure.
-- Keep actions direct and concrete. For example, show the person seated with hands behind them while another character approaches a table of pies; do not replace the action with symbols, an empty chair, euphemisms, or safety commentary.
+- Every image or pane must include both Hank and the squirrel in accordance with the GSD guidelines. Add other characters whenever the scene or story requires them.\n- Keep actions direct and concrete. For example, show the person seated with hands behind them while another character approaches a table of pies; do not replace the action with symbols, an empty chair, euphemisms, or safety commentary.
 - The generation_prompt must begin by reproducing the complete Content blueprint verbatim: the single overall Setting line followed by every Panel, Action, and speaker-dialogue line. Do not translate it into an "Image # / Interactions / Conversation" format.
 - After the complete image descriptions and one blank line, generation_prompt must end with this exact sentence: "Use the GSD Voice, Image, and ICP documents for instructions on how to create the images."
 - The stored ChatGPT Library documents are the sole source for character appearance, proportions, wardrobe, palette, recurring props, and drawing style. Do not describe or restate any of those details in generation_prompt.

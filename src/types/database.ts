@@ -5,7 +5,7 @@ export type ContentStatus = "new" | "auto_added" | "generated" | "posted" | "arc
 export type ContentItem = {
   id: string; owner_id: string; identifier: string; parent_id: string | null; variation_number: number | null;
   title: string | null; status: ContentStatus; content_type: string | null; panel_count: number | null;
-  overview: string | null; content: string | null; caption: string | null; generation_prompt: string | null;
+  overview: string | null; content: string | null; caption: string | null; first_comment: string | null; generation_prompt: string | null;
   score: number | null; priority: number | null; is_favorite: boolean; instagram_url: string | null;
   publishing_notes: string | null; generated_at: string | null; posted_at: string | null; archived_at: string | null;
   record_version: number; created_at: string; updated_at: string;

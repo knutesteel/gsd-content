@@ -12,11 +12,16 @@ export async function GET(request: Request) {
     httpOnly: true, secure: true, sameSite: "lax", maxAge: 10 * 60, path: "/api/instagram/callback",
   });
   const redirectUri = process.env.META_REDIRECT_URI ?? new URL("/api/instagram/callback", request.url).toString();
-  const authorize = new URL("https://www.instagram.com/oauth/authorize");
-  authorize.search = new URLSearchParams({
-    client_id: appId, redirect_uri: redirectUri, response_type: "code", state,
-    scope: "instagram_business_basic,instagram_business_manage_insights",
-    force_reauth: "true",
-  }).toString();
+  // Instagram's generated Business Login URL leaves redirect_uri unescaped.
+  // Its current OAuth endpoint rejects the equivalent URLSearchParams-encoded
+  // value as an invalid redirect URI, so preserve Meta's working wire format.
+  const authorize = [
+    "https://www.instagram.com/oauth/authorize?force_reauth=true",
+    `client_id=${encodeURIComponent(appId)}`,
+    `redirect_uri=${redirectUri}`,
+    "response_type=code",
+    `scope=${encodeURIComponent("instagram_business_basic,instagram_business_manage_insights")}`,
+    `state=${encodeURIComponent(state)}`,
+  ].join("&");
   return Response.redirect(authorize);
 }

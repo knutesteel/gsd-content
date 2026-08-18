@@ -2,10 +2,10 @@ import Link from "next/link";
 import { logout } from "@/app/login/actions";
 
 const primaryLinks = [
-  ["/", "Content Ideas"],
+  ["/", "News Articles"],
   ["/discover", "News Search"],
   ["/instagram-insights", "Instagram Insights"],
-  ["/content-plan", "News Articles"],
+  ["/content-plan", "Content Plan"],
   ["/collaborations", "Collaborations"],
   ["/channels", "Channels"],
   ["/online-sales", "Online Sales"],

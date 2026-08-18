@@ -46,11 +46,11 @@ export function ContentPlanLoader() {
 
     async function mount() {
       if (!window.GSD_CONTENT_PLAN_DATA) {
-        await loadScript("/content-plan-data.js", "content-plan-data-script");
+        await loadScript("/content-plan-data.js?v=20260818", "content-plan-data-script");
       }
 
       if (!window.mountGsdContentPlan) {
-        await loadScript("/content-plan-ui.js", "content-plan-ui-script");
+        await loadScript("/content-plan-ui.js?v=20260818", "content-plan-ui-script");
       }
 
       if (!cancelled) {

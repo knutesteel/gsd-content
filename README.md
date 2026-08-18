@@ -31,6 +31,12 @@ V2 of the Hank and the Squirrel content application. PostgreSQL is the source of
 
 AI generation requires `OPENAI_API_KEY`. Scheduled jobs require `CRON_SECRET` and `SUPABASE_SECRET_KEY` in Vercel. These values are server-only and must never use a `NEXT_PUBLIC_` prefix.
 
+## Automated Instagram Insights
+
+The Instagram Insights page connects through Meta's Instagram API with Instagram Login, stores encrypted access tokens, and snapshots account and media performance in Supabase. Vercel refreshes connected accounts every six hours; an administrator can also use Refresh Now.
+
+Configure `META_APP_ID`, `META_APP_SECRET`, and a random 32-byte `META_TOKEN_ENCRYPTION_KEY` in Vercel. Register `https://gsd-content.vercel.app/api/instagram/callback` as the exact OAuth redirect URI and optionally set it as `META_REDIRECT_URI`. The Meta app needs `instagram_business_basic` and `instagram_business_manage_insights`.
+
 ## Local Setup
 
 1. Copy `.env.example` to `.env.local`.

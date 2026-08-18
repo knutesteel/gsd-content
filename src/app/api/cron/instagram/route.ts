@@ -4,9 +4,21 @@ import { syncInstagramConnection } from "@/lib/instagram";
 
 export const maxDuration = 300;
 
+function easternHour(date: Date) {
+  return Number(new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).format(date));
+}
+
 export async function GET(request: Request) {
   if (!process.env.CRON_SECRET || request.headers.get("authorization") !== `Bearer ${process.env.CRON_SECRET}`) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const now = new Date();
+  if (easternHour(now) !== 4) {
+    return Response.json({ processed: 0, skipped: true, reason: "Outside the 4:00 AM America/New_York sync window" });
   }
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL; const key = process.env.SUPABASE_SECRET_KEY;
   if (!url || !key) return Response.json({ error: "Instagram sync requires SUPABASE_SECRET_KEY" }, { status: 503 });

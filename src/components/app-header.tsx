@@ -2,11 +2,10 @@ import Link from "next/link";
 import { logout } from "@/app/login/actions";
 
 const primaryLinks = [
-  ["/instructions", "Instructions"],
   ["/", "Content Ideas"],
-  ["/discover", "Content Search"],
+  ["/discover", "News Search"],
   ["/instagram-insights", "Instagram Insights"],
-  ["/content-plan", "Content Plan"],
+  ["/content-plan", "News Articles"],
   ["/collaborations", "Collaborations"],
   ["/channels", "Channels"],
   ["/online-sales", "Online Sales"],
@@ -30,11 +29,20 @@ export function AppHeader() {
           </Link>
         ))}
         <a
+          className="external-plan-link"
           href="https://gsd-retail-plan.knutesteel.chatgpt.site/"
           target="_blank"
           rel="noopener noreferrer"
         >
           Retail Plan
+        </a>
+        <a
+          className="external-plan-link"
+          href="https://podcast-outreach-command-center.knutesteel.chatgpt.site/"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Podcast Plan
         </a>
         <div className="nav-bottom">
           {bottomLinks.map(([href, label]) => (

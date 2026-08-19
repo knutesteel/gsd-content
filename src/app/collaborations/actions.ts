@@ -41,6 +41,17 @@ export async function updateCreatorFollowState(id: number, isFollowing: boolean)
   revalidatePath("/collaborations");
 }
 
+export async function updateCreatorName(id: number, creatorName: string) {
+  const cleanName = creatorName.trim();
+  if (!cleanName) throw new Error("Creator name is required");
+  const { supabase, user } = await authenticatedCreator(id);
+  const { error } = await (supabase as any).from("creator_partnerships")
+    .update({ creator_name: cleanName, updated_at: new Date().toISOString() })
+    .eq("id", id).eq("owner_id", user.id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/collaborations");
+}
+
 export async function recordCreatorDmSent(id: number) {
   const { supabase, user, creator } = await authenticatedCreator(id);
   const { error } = await (supabase as any).from("creator_partnerships")

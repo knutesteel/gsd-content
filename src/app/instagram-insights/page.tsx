@@ -3,6 +3,7 @@ import Link from "next/link";
 import { AppHeader } from "@/components/app-header";
 import { createClient } from "@/lib/supabase/server";
 import { refreshInstagramInsights, updateInstagramStatus } from "./actions";
+import { RefreshInstagramButton } from "./refresh-instagram-button";
 
 const tabs = [["performance","Performance"],["saved","Saved Items"],["following","Following"],["followers","Followers"]] as const;
 const drilldownMetrics = ["followers","views","reach","interactions","posts"] as const;
@@ -53,7 +54,7 @@ export default async function InstagramInsights({ searchParams }: { searchParams
   const chartRows = [...snapshots].reverse(); const maxReach = Math.max(1,...chartRows.map((row:any)=>Number(row.reach||0)));
   const configured = Boolean(process.env.META_APP_ID && process.env.META_APP_SECRET && process.env.META_TOKEN_ENCRYPTION_KEY);
   return <main className="app-shell"><AppHeader />
-    <section className="dashboard-head insights-head"><div><p className="eyebrow">Audience & Performance</p><h1>Instagram Insights</h1><p>{connection ? `@${connection.instagram_username ?? "Instagram"} · ${n(connection.followers_count)} followers · Last updated ${connection.last_synced_at ? new Date(connection.last_synced_at).toLocaleString() : "not yet"}` : "Connect Instagram to automatically track performance and audience growth."}</p></div><div className="button-row"><Link href="/api/instagram/connect">{connection?.connection_status === "connected" ? "Reconnect Instagram" : "Connect Instagram"}</Link><form action={refreshInstagramInsights}><button className="primary" disabled={!configured || connection?.connection_status === "disconnected"}>Refresh Now</button></form></div></section>
+    <section className="dashboard-head insights-head"><div><p className="eyebrow">Audience & Performance</p><h1>Instagram Insights</h1><p>{connection ? `@${connection.instagram_username ?? "Instagram"} · ${n(connection.followers_count)} followers · Last updated ${connection.last_synced_at ? new Date(connection.last_synced_at).toLocaleString() : "not yet"}` : "Connect Instagram to automatically track performance and audience growth."}</p></div><div className="button-row"><Link href="/api/instagram/connect">{connection?.connection_status === "connected" ? "Reconnect Instagram" : "Connect Instagram"}</Link><form action={refreshInstagramInsights}><RefreshInstagramButton disabled={!configured || connection?.connection_status !== "connected"} /></form></div></section>
     {!configured ? <div className="notice">Automatic sync is installed. Add the three Meta environment settings in Vercel to activate Connect Instagram.</div> : null}
     {params.connected ? <div className="notice success-notice">Instagram connected and the first sync completed.</div> : null}
     {params.refreshed ? <div className="notice success-notice">Instagram insights refreshed successfully.</div> : null}

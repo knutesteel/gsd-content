@@ -44,7 +44,7 @@ function displayName(creator: Creator) {
   return importedNameIsIncomplete && creator.instagram_handle ? creator.instagram_handle.replace(/^@/, "") : creator.creator_name;
 }
 
-export function CollaborationsClient({ initialCreators, initialTemplates, loadError }: { initialCreators: Creator[]; initialTemplates: Template[]; loadError: string | null }) {
+export function CollaborationsClient({ initialCreators, initialTemplates, dmSyncEnabled, dmLastSyncedAt, loadError }: { initialCreators: Creator[]; initialTemplates: Template[]; dmSyncEnabled: boolean; dmLastSyncedAt: string | null; loadError: string | null }) {
   const [creators, setCreators] = useState(initialCreators);
   const [templates, setTemplates] = useState(initialTemplates);
   const [query, setQuery] = useState("");
@@ -201,8 +201,8 @@ export function CollaborationsClient({ initialCreators, initialTemplates, loadEr
     if (!composer || !dmMessage.trim()) return;
     await navigator.clipboard.writeText(dmMessage);
     const creatorId = composer.id;
-    setCreators((current) => current.map((creator) => creator.id === creatorId ? { ...creator, status: "contacted", dm_sent_count: creator.dm_sent_count + 1, last_dm_sent_at: new Date().toISOString() } : creator));
-    setSelected((current) => current?.id === creatorId ? { ...current, status: "contacted", dm_sent_count: current.dm_sent_count + 1, last_dm_sent_at: new Date().toISOString() } : current);
+    setCreators((current) => current.map((creator) => creator.id === creatorId ? { ...creator, status: "contacted" } : creator));
+    setSelected((current) => current?.id === creatorId ? { ...current, status: "contacted" } : current);
     startTransition(async () => {
       try { await recordCreatorDmSent(creatorId); }
       catch (error) { setNotice(error instanceof Error ? error.message : "Could not record the message"); }
@@ -265,6 +265,8 @@ export function CollaborationsClient({ initialCreators, initialTemplates, loadEr
         <button className="collab-primary" onClick={() => setAddingTemplate(true)}>+ New DM template</button>
       </header>
       {loadError && <div className="collab-alert">Could not load collaborations: {loadError}</div>}
+      {!dmSyncEnabled && <div className="collab-alert">Reconnect Instagram once to enable real sent and received DM counts. <a href="/api/instagram/connect">Reconnect Instagram</a></div>}
+      {dmSyncEnabled && dmLastSyncedAt && <p className="collab-dm-sync">DM counts synced from Instagram {new Date(dmLastSyncedAt).toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" })} ET.</p>}
       {notice && <button className="collab-notice" onClick={() => setNotice("")}>{notice} ×</button>}
 
       <div className="collab-metrics">
@@ -287,7 +289,7 @@ export function CollaborationsClient({ initialCreators, initialTemplates, loadEr
             <label className="collab-check" onClick={(event) => event.stopPropagation()}><input type="checkbox" checked={selectedIds.has(creator.id)} onChange={() => toggleCreator(creator.id)} aria-label={`Select ${displayName(creator)}`} /></label>
             <div className="collab-creator"><span className="collab-rank">{creator.rank}</span><div><div className="collab-name-line"><h2><a href={`https://www.instagram.com/${creator.instagram_handle.replace(/^@/, "")}/`} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>{displayName(creator)}</a></h2>{creator.is_following ? <span className="collab-row-followed">✓ Followed</span> : <button className="collab-row-follow" disabled={!creator.instagram_handle} onClick={(event) => { event.stopPropagation(); followCreator(creator); }}>Instagram Follow</button>}</div><a href={`https://www.instagram.com/${creator.instagram_handle.replace(/^@/, "")}/`} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>{creator.instagram_handle || "No handle listed"}</a><p>{creator.description}</p><small>{creator.fit_rationale}</small></div></div>
             <div><strong className="collab-score">{creator.fit_score}</strong><small>{creator.priority}</small></div>
-            <div className="collab-dm-counts"><strong>Sent {creator.dm_sent_count}</strong><small>Rec’d {creator.dm_received_count}{creator.unread_dm_count > 0 && <sup className="collab-unread" aria-label={`${creator.unread_dm_count} unread messages`}>*</sup>}</small></div>
+            <div className="collab-dm-counts"><a href={`https://ig.me/m/${creator.instagram_handle.replace(/^@/, "")}`} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}><strong>Rec’d {creator.dm_received_count}{creator.unread_dm_count > 0 && <sup className="collab-unread" aria-label={`${creator.unread_dm_count} unread messages`}>*</sup>}</strong></a><a href={`https://ig.me/m/${creator.instagram_handle.replace(/^@/, "")}`} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}><small>Sent {creator.dm_sent_count}</small></a></div>
             <p className="collab-notes">{creator.notes || "—"}</p>
             <span className="collab-source">{creator.source || "SocialCat"}</span>
             <div className="collab-row-actions"><select className={`collab-status status-${creator.status}`} value={creator.status} disabled={isPending} onClick={(event) => event.stopPropagation()} onChange={(event) => setStatus(creator.id, event.target.value as Status)}>{statuses.map((status) => <option value={status} key={status}>{labels[status]}</option>)}</select><button className="collab-dm" onClick={(event) => { event.stopPropagation(); openComposer(creator); }}>Send Instagram DM</button></div>

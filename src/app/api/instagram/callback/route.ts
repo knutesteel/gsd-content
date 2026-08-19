@@ -45,7 +45,7 @@ export async function GET(request: Request) {
       owner_id: user.id, instagram_user_id: String(profile.user_id ?? profile.id ?? short.user_id),
       instagram_username: profile.username, followers_count: profile.followers_count ?? 0, media_count: profile.media_count ?? 0,
       access_token_encrypted: encryptInstagramToken(long.access_token), token_expires_at: expiresAt,
-      granted_scopes: short.permissions ?? ["instagram_business_basic", "instagram_business_manage_insights"],
+      granted_scopes: short.permissions ?? ["instagram_business_basic", "instagram_business_manage_insights", "instagram_business_manage_messages"],
       connection_status: "connected", last_sync_error: null, updated_at: new Date().toISOString(),
     }, { onConflict: "owner_id" }).select("*").single();
     if (error || !connection) throw error ?? new Error("Could not save the Instagram connection");

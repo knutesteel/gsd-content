@@ -7,7 +7,7 @@ type Status = "new" | "contacted" | "accepted" | "rejected" | "disqualified";
 type Creator = {
   id: number; rank: number; fit_score: number; priority: string; creator_name: string;
   instagram_handle: string; description: string; followers: number; engagement_rate: number;
-  fit_rationale: string; status: Status; is_following: boolean; followed_at: string | null;
+  fit_rationale: string; notes: string; status: Status; is_following: boolean; followed_at: string | null;
   dm_sent_count: number; dm_received_count: number; unread_dm_count: number;
   last_dm_sent_at: string | null; last_dm_received_at: string | null; last_dm_read_at: string | null;
 };
@@ -46,7 +46,7 @@ export function CollaborationsClient({ initialCreators, initialTemplates, loadEr
 
   const visible = useMemo(() => {
     const needle = query.toLowerCase().trim();
-    return creators.filter((creator) => (filter === "all" || creator.status === filter) && (!needle || `${creator.creator_name} ${creator.instagram_handle} ${creator.description} ${creator.fit_rationale}`.toLowerCase().includes(needle)))
+    return creators.filter((creator) => (filter === "all" || creator.status === filter) && (!needle || `${creator.creator_name} ${creator.instagram_handle} ${creator.description} ${creator.fit_rationale} ${creator.notes}`.toLowerCase().includes(needle)))
       .sort((a, b) => sort === "score" ? b.fit_score - a.fit_score : sort === "followers" ? b.followers - a.followers : a.rank - b.rank);
   }, [creators, filter, query, sort]);
 
@@ -145,14 +145,14 @@ export function CollaborationsClient({ initialCreators, initialTemplates, loadEr
       </div>
 
       <div className="collab-table-wrap">
-        <div className="collab-table collab-head"><span>Creator</span><span>Fit</span><span>DMs</span><span>Status</span><span>Action</span></div>
+        <div className="collab-table collab-head"><span>Creator</span><span>Fit</span><span>DMs</span><span>Notes</span><span>Status &amp; Action</span></div>
         {visible.map((creator) => (
           <article className="collab-table collab-row" key={creator.id} role="button" tabIndex={0} onClick={() => { setSelected(creator); setEditingName(false); setDraftName(creator.creator_name); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { setSelected(creator); setEditingName(false); setDraftName(creator.creator_name); } }}>
-            <div className="collab-creator"><span className="collab-rank">{creator.rank}</span><div><div className="collab-name-line"><h2>{displayName(creator)}</h2>{creator.is_following ? <span className="collab-row-followed">✓ Followed</span> : <button className="collab-row-follow" disabled={!creator.instagram_handle} onClick={(event) => { event.stopPropagation(); followCreator(creator); }}>Instagram Follow</button>}</div><a href={`https://www.instagram.com/${creator.instagram_handle.replace(/^@/, "")}/`} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>{creator.instagram_handle || "No handle listed"}</a><p>{creator.description}</p><small>{creator.fit_rationale}</small></div></div>
+            <div className="collab-creator"><span className="collab-rank">{creator.rank}</span><div><div className="collab-name-line"><h2><a href={`https://www.instagram.com/${creator.instagram_handle.replace(/^@/, "")}/`} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>{displayName(creator)}</a></h2>{creator.is_following ? <span className="collab-row-followed">✓ Followed</span> : <button className="collab-row-follow" disabled={!creator.instagram_handle} onClick={(event) => { event.stopPropagation(); followCreator(creator); }}>Instagram Follow</button>}</div><a href={`https://www.instagram.com/${creator.instagram_handle.replace(/^@/, "")}/`} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>{creator.instagram_handle || "No handle listed"}</a><p>{creator.description}</p><small>{creator.fit_rationale}</small></div></div>
             <div><strong className="collab-score">{creator.fit_score}</strong><small>{creator.priority}</small></div>
             <div className="collab-dm-counts"><strong>Sent {creator.dm_sent_count}</strong><small>Rec’d {creator.dm_received_count}{creator.unread_dm_count > 0 && <sup className="collab-unread" aria-label={`${creator.unread_dm_count} unread messages`}>*</sup>}</small></div>
-            <select className={`collab-status status-${creator.status}`} value={creator.status} disabled={isPending} onClick={(event) => event.stopPropagation()} onChange={(event) => setStatus(creator.id, event.target.value as Status)}>{statuses.map((status) => <option value={status} key={status}>{labels[status]}</option>)}</select>
-            <button className="collab-dm" onClick={(event) => { event.stopPropagation(); setComposer(creator); setCustomMessage(""); }}>Send Instagram DM</button>
+            <p className="collab-notes">{creator.notes || "—"}</p>
+            <div className="collab-row-actions"><select className={`collab-status status-${creator.status}`} value={creator.status} disabled={isPending} onClick={(event) => event.stopPropagation()} onChange={(event) => setStatus(creator.id, event.target.value as Status)}>{statuses.map((status) => <option value={status} key={status}>{labels[status]}</option>)}</select><button className="collab-dm" onClick={(event) => { event.stopPropagation(); setComposer(creator); setCustomMessage(""); }}>Send Instagram DM</button></div>
           </article>
         ))}
         {!visible.length && <div className="collab-empty">No creators match those filters.</div>}

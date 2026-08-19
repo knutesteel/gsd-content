@@ -12,3 +12,6 @@
 .collab-notes{display:-webkit-box;margin:0;overflow:hidden;color:#625e55;font-size:.78rem;line-height:1.4;-webkit-box-orient:vertical;-webkit-line-clamp:4}
 .collab-row-actions{display:flex;gap:8px;align-items:stretch;flex-direction:column}
 .collab-row-actions .collab-status,.collab-row-actions .collab-dm{width:100%}
+
+.collab-table{grid-template-columns:minmax(440px,2.3fr) minmax(85px,.45fr) minmax(105px,.55fr) minmax(250px,1.25fr) minmax(100px,.5fr) minmax(170px,.8fr);min-width:1400px}
+.collab-source{display:inline-flex;width:max-content;max-width:100%;padding:5px 8px;border-radius:99px;background:#eee7da;color:#625e55;font-size:.7rem;font-weight:850}

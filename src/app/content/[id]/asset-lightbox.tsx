@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 type LightboxAsset = {
   id: string;
@@ -14,9 +14,9 @@ export function AssetLightbox({ assets }: { assets: LightboxAsset[] }) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const activeAsset = activeIndex === null ? null : assets[activeIndex];
 
-  function move(direction: -1 | 1) {
+  const move = useCallback((direction: -1 | 1) => {
     setActiveIndex((current) => current === null ? null : (current + direction + assets.length) % assets.length);
-  }
+  }, [assets.length]);
 
   useEffect(() => {
     if (activeIndex === null) return;
@@ -32,7 +32,7 @@ export function AssetLightbox({ assets }: { assets: LightboxAsset[] }) {
       document.body.style.overflow = originalOverflow;
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [activeIndex, assets.length]);
+  }, [activeIndex, assets.length, move]);
 
   return <>
     <div className="asset-grid">

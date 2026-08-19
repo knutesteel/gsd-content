@@ -58,13 +58,13 @@ export default async function InstagramInsights({ searchParams }: { searchParams
   const fallbackInteractions = allPosts.reduce((sum:number,row:any)=>sum+Number(row.total_interactions||0),0);
   const reach = latest?.reach ?? fallbackReach; const interactions = latest?.total_interactions ?? fallbackInteractions;
   const rows = tab === "followers" ? allProfiles.filter((r:any)=>r.relationship_type === "followers") : allProfiles.filter((r:any)=>r.relationship_type === "following");
-  const direction: "asc" | "desc" = params.dir === "asc" ? "asc" : "desc";
-  const performanceFields: Record<string,string> = { post:"caption", views:"views", reach:"reach", likes:"like_count", comments:"comments_count", saved:"saved", shares:"shares", engagement:"engagement_rate" };
+  const direction: "asc" | "desc" = params.dir === "asc" || (!params.dir && tab !== "performance") ? "asc" : "desc";
+  const performanceFields: Record<string,string> = { post:"published_at", views:"views", reach:"reach", likes:"like_count", comments:"comments_count", saved:"saved", shares:"shares", engagement:"engagement_rate" };
   const profileFields: Record<string,string> = { account:"username", followers:"followers_count", overview:"biography", fit:"fit_score", status:"collaboration_status" };
   const activeFields = tab === "performance" ? performanceFields : profileFields;
   const defaultSort = tab === "performance" ? "post" : "account";
   const sort = params.sort && activeFields[params.sort] ? params.sort : defaultSort;
-  const sortedPosts = [...allPosts].sort((a:any,b:any)=>compareRows(a,b,performanceFields[sort] ?? "caption",direction));
+  const sortedPosts = [...allPosts].sort((a:any,b:any)=>compareRows(a,b,performanceFields[sort] ?? "published_at",direction));
   const sortedProfiles = [...rows].sort((a:any,b:any)=>compareRows(a,b,profileFields[sort] ?? "username",direction));
   const sortHref = (column:string) => {
     const nextDirection = sort === column && direction === "asc" ? "desc" : "asc";

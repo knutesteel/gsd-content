@@ -105,3 +105,22 @@ export async function createDmTemplate(name: string, body: string) {
   revalidatePath("/collaborations");
   return data as { id: number; name: string; body: string };
 }
+
+export async function updateDmTemplate(id: number, body: string) {
+  const cleanBody = body.trim();
+  if (!Number.isInteger(id) || id <= 0) throw new Error("Invalid template");
+  if (!cleanBody) throw new Error("Template message is required");
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("You must be signed in");
+  const { data, error } = await (supabase as any)
+    .from("collaboration_dm_templates")
+    .update({ body: cleanBody })
+    .eq("id", id)
+    .eq("owner_id", user.id)
+    .select("id, name, body")
+    .single();
+  if (error) throw new Error(error.message);
+  revalidatePath("/collaborations");
+  return data as { id: number; name: string; body: string };
+}

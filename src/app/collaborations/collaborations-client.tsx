@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { createDmTemplate, markCreatorMessagesRead, recordCreatorDmSent, updateCreatorFollowState, updateCreatorName, updateCreatorStatus, updateCreatorStatuses } from "./actions";
+import { createDmTemplate, markCreatorMessagesRead, recordCreatorDmSent, updateCreatorFollowState, updateCreatorName, updateCreatorStatus, updateCreatorStatuses, updateDmTemplate } from "./actions";
 
 type Status = "new" | "contacted" | "accepted" | "rejected" | "disqualified";
 type Creator = {
@@ -33,6 +33,12 @@ function formatFollowers(value: number) {
 function mergeMessage(body: string, creator: Creator) {
   return body.replaceAll("{{name}}", creator.creator_name).replaceAll("{{handle}}", creator.instagram_handle);
 }
+function templatizeMessage(body: string, creator: Creator) {
+  let template = body;
+  if (creator.creator_name) template = template.replaceAll(creator.creator_name, "{{name}}");
+  if (creator.instagram_handle) template = template.replaceAll(creator.instagram_handle, "{{handle}}");
+  return template;
+}
 function displayName(creator: Creator) {
   const importedNameIsIncomplete = creator.creator_name.includes("...") || creator.creator_name.includes("…");
   return importedNameIsIncomplete && creator.instagram_handle ? creator.instagram_handle.replace(/^@/, "") : creator.creator_name;
@@ -53,6 +59,8 @@ export function CollaborationsClient({ initialCreators, initialTemplates, loadEr
   const [draftName, setDraftName] = useState("");
   const [templateId, setTemplateId] = useState<number | "custom">(initialTemplates[0]?.id ?? "custom");
   const [customMessage, setCustomMessage] = useState("");
+  const [dmMessage, setDmMessage] = useState("");
+  const [newTemplateName, setNewTemplateName] = useState("");
   const [addingTemplate, setAddingTemplate] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [templateBody, setTemplateBody] = useState("");
@@ -102,7 +110,60 @@ export function CollaborationsClient({ initialCreators, initialTemplates, loadEr
     });
   }
   const activeTemplate = templates.find((template) => template.id === templateId);
-  const message = composer ? (templateId === "custom" ? customMessage : mergeMessage(activeTemplate?.body ?? "", composer)) : "";
+  const originalMessage = composer && activeTemplate ? mergeMessage(activeTemplate.body, composer) : "";
+  const messageEdited = Boolean(composer && dmMessage.trim() && dmMessage !== originalMessage);
+
+  function openComposer(creator: Creator) {
+    const template = templates.find((item) => item.id === templateId);
+    setComposer(creator);
+    setDmMessage(templateId === "custom" ? "" : mergeMessage(template?.body ?? "", creator));
+    setCustomMessage("");
+    setNewTemplateName("");
+  }
+
+  function chooseTemplate(value: string) {
+    if (!composer) return;
+    const nextId = value === "custom" ? "custom" : Number(value);
+    setTemplateId(nextId);
+    setNewTemplateName("");
+    if (nextId === "custom") {
+      setDmMessage(customMessage);
+      return;
+    }
+    const template = templates.find((item) => item.id === nextId);
+    setDmMessage(mergeMessage(template?.body ?? "", composer));
+  }
+
+  function editDmMessage(value: string) {
+    setDmMessage(value);
+    if (templateId === "custom") setCustomMessage(value);
+  }
+
+  function updateSelectedTemplate() {
+    if (!composer || templateId === "custom" || !dmMessage.trim()) return;
+    const body = templatizeMessage(dmMessage, composer);
+    startTransition(async () => {
+      try {
+        const updated = await updateDmTemplate(templateId, body);
+        setTemplates((current) => current.map((template) => template.id === updated.id ? updated : template));
+        setNotice(`Template “${updated.name}” updated.`);
+      } catch (error) { setNotice(error instanceof Error ? error.message : "Could not update template"); }
+    });
+  }
+
+  function saveEditedAsNewTemplate() {
+    if (!composer || !newTemplateName.trim() || !dmMessage.trim()) return;
+    const body = templatizeMessage(dmMessage, composer);
+    startTransition(async () => {
+      try {
+        const created = await createDmTemplate(newTemplateName, body);
+        setTemplates((current) => [...current, created]);
+        setTemplateId(created.id);
+        setNewTemplateName("");
+        setNotice(`Template “${created.name}” saved.`);
+      } catch (error) { setNotice(error instanceof Error ? error.message : "Could not save new template"); }
+    });
+  }
 
   function setStatus(id: number, status: Status) {
     const previous = creators;
@@ -114,8 +175,8 @@ export function CollaborationsClient({ initialCreators, initialTemplates, loadEr
   }
 
   async function sendMessage() {
-    if (!composer || !message.trim()) return;
-    await navigator.clipboard.writeText(message);
+    if (!composer || !dmMessage.trim()) return;
+    await navigator.clipboard.writeText(dmMessage);
     const creatorId = composer.id;
     setCreators((current) => current.map((creator) => creator.id === creatorId ? { ...creator, status: "contacted", dm_sent_count: creator.dm_sent_count + 1, last_dm_sent_at: new Date().toISOString() } : creator));
     setSelected((current) => current?.id === creatorId ? { ...current, status: "contacted", dm_sent_count: current.dm_sent_count + 1, last_dm_sent_at: new Date().toISOString() } : current);
@@ -206,15 +267,15 @@ export function CollaborationsClient({ initialCreators, initialTemplates, loadEr
             <div className="collab-dm-counts"><strong>Sent {creator.dm_sent_count}</strong><small>Rec’d {creator.dm_received_count}{creator.unread_dm_count > 0 && <sup className="collab-unread" aria-label={`${creator.unread_dm_count} unread messages`}>*</sup>}</small></div>
             <p className="collab-notes">{creator.notes || "—"}</p>
             <span className="collab-source">{creator.source || "SocialCat"}</span>
-            <div className="collab-row-actions"><select className={`collab-status status-${creator.status}`} value={creator.status} disabled={isPending} onClick={(event) => event.stopPropagation()} onChange={(event) => setStatus(creator.id, event.target.value as Status)}>{statuses.map((status) => <option value={status} key={status}>{labels[status]}</option>)}</select><button className="collab-dm" onClick={(event) => { event.stopPropagation(); setComposer(creator); setCustomMessage(""); }}>Send Instagram DM</button></div>
+            <div className="collab-row-actions"><select className={`collab-status status-${creator.status}`} value={creator.status} disabled={isPending} onClick={(event) => event.stopPropagation()} onChange={(event) => setStatus(creator.id, event.target.value as Status)}>{statuses.map((status) => <option value={status} key={status}>{labels[status]}</option>)}</select><button className="collab-dm" onClick={(event) => { event.stopPropagation(); openComposer(creator); }}>Send Instagram DM</button></div>
           </article>
         ))}
         {!visible.length && <div className="collab-empty">No creators match those filters.</div>}
       </div>
 
-      {selected && <div className="collab-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSelected(null)}><section className="collab-modal collab-detail" role="dialog" aria-modal="true" aria-labelledby="creator-title"><button className="collab-close" onClick={() => setSelected(null)} aria-label="Close">×</button><p className="eyebrow">Creator #{selected.rank}</p>{editingName ? <div className="collab-name-editor"><input value={draftName} onChange={(event) => setDraftName(event.target.value)} aria-label="Full creator name" autoFocus /><button className="collab-primary" disabled={!draftName.trim() || isPending} onClick={() => saveCreatorName(selected)}>Save name</button><button onClick={() => setEditingName(false)}>Cancel</button></div> : <div className="collab-detail-name"><h2 id="creator-title">{displayName(selected)}</h2><button onClick={() => { setDraftName(selected.creator_name); setEditingName(true); }}>Edit full name</button></div>}<a className="collab-handle" href={`https://www.instagram.com/${selected.instagram_handle.replace(/^@/, "")}/`} target="_blank" rel="noreferrer">{selected.instagram_handle || "No Instagram handle listed"}</a><div className="collab-detail-actions">{selected.is_following ? <span className="collab-following">✓ Followed</span> : <button className="collab-primary" disabled={!selected.instagram_handle} onClick={() => followCreator(selected)}>Follow on Instagram</button>}<button onClick={() => { setComposer(selected); setCustomMessage(""); }}>Send Instagram DM</button></div><div className="collab-detail-metrics"><div><span>Fit score</span><strong>{selected.fit_score}</strong><small>{selected.priority}</small></div><div><span>Followers</span><strong>{formatFollowers(selected.followers)}</strong><small>{selected.engagement_rate}% engagement</small></div><div><span>DMs sent</span><strong>{selected.dm_sent_count}</strong><small>{selected.last_dm_sent_at ? `Last ${new Date(selected.last_dm_sent_at).toLocaleDateString()}` : "None yet"}</small></div><div><span>DMs received</span><strong>{selected.dm_received_count}{selected.unread_dm_count > 0 && <sup className="collab-unread">*</sup>}</strong><small>{selected.unread_dm_count > 0 ? `${selected.unread_dm_count} unread` : "No unread messages"}</small></div></div>{selected.unread_dm_count > 0 && <button className="collab-mark-read" onClick={() => markRead(selected)}>Mark messages read</button>}<section className="collab-detail-copy"><h3>Source</h3><p>{selected.source || "SocialCat"}</p><h3>About</h3><p>{selected.description || "No description available."}</p><h3>Why this creator fits</h3><p>{selected.fit_rationale}</p></section><label>Status<select className={`collab-status status-${selected.status}`} value={selected.status} onChange={(event) => { const status = event.target.value as Status; setStatus(selected.id, status); setSelected({ ...selected, status }); }}>{statuses.map((status) => <option value={status} key={status}>{labels[status]}</option>)}</select></label></section></div>}
+      {selected && <div className="collab-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSelected(null)}><section className="collab-modal collab-detail" role="dialog" aria-modal="true" aria-labelledby="creator-title"><button className="collab-close" onClick={() => setSelected(null)} aria-label="Close">×</button><p className="eyebrow">Creator #{selected.rank}</p>{editingName ? <div className="collab-name-editor"><input value={draftName} onChange={(event) => setDraftName(event.target.value)} aria-label="Full creator name" autoFocus /><button className="collab-primary" disabled={!draftName.trim() || isPending} onClick={() => saveCreatorName(selected)}>Save name</button><button onClick={() => setEditingName(false)}>Cancel</button></div> : <div className="collab-detail-name"><h2 id="creator-title">{displayName(selected)}</h2><button onClick={() => { setDraftName(selected.creator_name); setEditingName(true); }}>Edit full name</button></div>}<a className="collab-handle" href={`https://www.instagram.com/${selected.instagram_handle.replace(/^@/, "")}/`} target="_blank" rel="noreferrer">{selected.instagram_handle || "No Instagram handle listed"}</a><div className="collab-detail-actions">{selected.is_following ? <span className="collab-following">✓ Followed</span> : <button className="collab-primary" disabled={!selected.instagram_handle} onClick={() => followCreator(selected)}>Follow on Instagram</button>}<button onClick={() => openComposer(selected)}>Send Instagram DM</button></div><div className="collab-detail-metrics"><div><span>Fit score</span><strong>{selected.fit_score}</strong><small>{selected.priority}</small></div><div><span>Followers</span><strong>{formatFollowers(selected.followers)}</strong><small>{selected.engagement_rate}% engagement</small></div><div><span>DMs sent</span><strong>{selected.dm_sent_count}</strong><small>{selected.last_dm_sent_at ? `Last ${new Date(selected.last_dm_sent_at).toLocaleDateString()}` : "None yet"}</small></div><div><span>DMs received</span><strong>{selected.dm_received_count}{selected.unread_dm_count > 0 && <sup className="collab-unread">*</sup>}</strong><small>{selected.unread_dm_count > 0 ? `${selected.unread_dm_count} unread` : "No unread messages"}</small></div></div>{selected.unread_dm_count > 0 && <button className="collab-mark-read" onClick={() => markRead(selected)}>Mark messages read</button>}<section className="collab-detail-copy"><h3>Source</h3><p>{selected.source || "SocialCat"}</p><h3>About</h3><p>{selected.description || "No description available."}</p><h3>Why this creator fits</h3><p>{selected.fit_rationale}</p></section><label>Status<select className={`collab-status status-${selected.status}`} value={selected.status} onChange={(event) => { const status = event.target.value as Status; setStatus(selected.id, status); setSelected({ ...selected, status }); }}>{statuses.map((status) => <option value={status} key={status}>{labels[status]}</option>)}</select></label></section></div>}
 
-      {composer && <div className="collab-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setComposer(null)}><section className="collab-modal" role="dialog" aria-modal="true" aria-labelledby="dm-title"><button className="collab-close" onClick={() => setComposer(null)} aria-label="Close">×</button><p className="eyebrow">Instagram outreach</p><h2 id="dm-title">Message {composer.creator_name}</h2><label>Template<select value={templateId} onChange={(event) => { const value = event.target.value; setTemplateId(value === "custom" ? "custom" : Number(value)); }}><option value="custom">Write a new message</option>{templates.map((template) => <option value={template.id} key={template.id}>{template.name}</option>)}</select></label>{templateId === "custom" ? <label>Message<textarea rows={9} value={customMessage} onChange={(event) => setCustomMessage(event.target.value)} placeholder={`Hey ${composer.creator_name}…`} /></label> : <textarea className="collab-preview" rows={9} value={message} readOnly />}<p className="collab-help">Instagram does not support prefilled DMs. This copies the message and opens the creator’s profile.</p><div className="collab-modal-actions"><button onClick={() => setComposer(null)}>Cancel</button><button className="collab-primary" disabled={!message.trim()} onClick={sendMessage}>Copy message & open Instagram</button></div></section></div>}
+      {composer && <div className="collab-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setComposer(null)}><section className="collab-modal" role="dialog" aria-modal="true" aria-labelledby="dm-title"><button className="collab-close" onClick={() => setComposer(null)} aria-label="Close">×</button><p className="eyebrow">Instagram outreach</p><h2 id="dm-title">Message {composer.creator_name}</h2><label>Template<select value={templateId} onChange={(event) => chooseTemplate(event.target.value)}><option value="custom">Write a new message</option>{templates.map((template) => <option value={template.id} key={template.id}>{template.name}</option>)}</select></label><label>Message<textarea className="collab-preview" rows={9} value={dmMessage} onChange={(event) => editDmMessage(event.target.value)} placeholder={`Hey ${composer.creator_name}…`} /></label>{messageEdited && templateId !== "custom" && <div className="collab-template-edits"><p>You changed this message. Save the changes to the selected template or create a new one.</p><div><button disabled={isPending} onClick={updateSelectedTemplate}>Update template</button><label><span>New template name</span><input value={newTemplateName} onChange={(event) => setNewTemplateName(event.target.value)} placeholder="Alternate creator intro" /></label><button disabled={isPending || !newTemplateName.trim()} onClick={saveEditedAsNewTemplate}>Save as new template</button></div></div>}{templateId === "custom" && dmMessage.trim() && <div className="collab-template-edits"><p>Save this message to use it again.</p><div><label><span>New template name</span><input value={newTemplateName} onChange={(event) => setNewTemplateName(event.target.value)} placeholder="Creator introduction" /></label><button disabled={isPending || !newTemplateName.trim()} onClick={saveEditedAsNewTemplate}>Save as new template</button></div></div>}<p className="collab-help">Instagram does not support prefilled DMs. This copies the message and opens the creator’s profile.</p><div className="collab-modal-actions"><button onClick={() => setComposer(null)}>Cancel</button><button className="collab-primary" disabled={!dmMessage.trim()} onClick={sendMessage}>Copy message & open Instagram</button></div></section></div>}
 
       {addingTemplate && <div className="collab-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setAddingTemplate(false)}><section className="collab-modal" role="dialog" aria-modal="true" aria-labelledby="template-title"><button className="collab-close" onClick={() => setAddingTemplate(false)} aria-label="Close">×</button><p className="eyebrow">Message library</p><h2 id="template-title">Create a DM template</h2><label>Template name<input value={templateName} onChange={(event) => setTemplateName(event.target.value)} placeholder="Creator introduction" /></label><label>Message<textarea rows={10} value={templateBody} onChange={(event) => setTemplateBody(event.target.value)} placeholder="Use {{name}} and {{handle}} for creator details." /></label><p className="collab-help">Available variables: {"{{name}}"} and {"{{handle}}"}</p><div className="collab-modal-actions"><button onClick={() => setAddingTemplate(false)}>Cancel</button><button className="collab-primary" disabled={isPending || !templateName.trim() || !templateBody.trim()} onClick={saveTemplate}>Save template</button></div></section></div>}
     </section>

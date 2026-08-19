@@ -6,8 +6,6 @@ const primaryLinks = [
   ["/discover", "News Search"],
   ["/instagram-insights", "Instagram Insights"],
   ["/content-plan", "Content Plan"],
-  ["/collaborations", "Collaborations"],
-  ["/channels", "Channels"],
   ["/online-sales", "Online Sales"],
 ];
 

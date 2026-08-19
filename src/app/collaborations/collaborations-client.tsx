@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { createDmTemplate, markCreatorMessagesRead, recordCreatorDmSent, updateCreatorFollowState, updateCreatorName, updateCreatorStatus, updateCreatorStatuses, updateDmTemplate } from "./actions";
+import { createDmTemplate, markCreatorMessagesRead, recordCreatorDmSent, updateCreatorFollowState, updateCreatorName, updateCreatorSources, updateCreatorStatus, updateCreatorStatuses, updateDmTemplate } from "./actions";
 
 type Status = "new" | "contacted" | "accepted" | "rejected" | "disqualified";
 type Creator = {
@@ -53,6 +53,8 @@ export function CollaborationsClient({ initialCreators, initialTemplates, loadEr
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkStatus, setBulkStatus] = useState<Status>("contacted");
+  const [bulkSource, setBulkSource] = useState("SocialCat");
+  const [newSource, setNewSource] = useState("");
   const [composer, setComposer] = useState<Creator | null>(null);
   const [selected, setSelected] = useState<Creator | null>(null);
   const [editingName, setEditingName] = useState(false);
@@ -74,6 +76,7 @@ export function CollaborationsClient({ initialCreators, initialTemplates, loadEr
   }, [creators, filter, query, sort, sortDirection]);
 
   const counts = useMemo(() => Object.fromEntries(statuses.map((status) => [status, creators.filter((creator) => creator.status === status).length])) as Record<Status, number>, [creators]);
+  const sourceOptions = useMemo(() => [...new Set(creators.map((creator) => creator.source.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [creators]);
   const allVisibleSelected = visible.length > 0 && visible.every((creator) => selectedIds.has(creator.id));
 
   function toggleCreator(id: number) {
@@ -103,6 +106,26 @@ export function CollaborationsClient({ initialCreators, initialTemplates, loadEr
         const updated = await updateCreatorStatuses(ids, bulkStatus);
         setSelectedIds(new Set());
         setNotice(`${updated} creator${updated === 1 ? "" : "s"} updated to ${labels[bulkStatus]}.`);
+      } catch (error) {
+        setCreators(previous);
+        setNotice(error instanceof Error ? error.message : "Could not update selected creators");
+      }
+    });
+  }
+
+  function applyBulkSource() {
+    const ids = [...selectedIds];
+    const source = bulkSource === "__new__" ? newSource.trim() : bulkSource.trim();
+    if (!ids.length || !source) return;
+    const previous = creators;
+    setCreators((current) => current.map((creator) => selectedIds.has(creator.id) ? { ...creator, source } : creator));
+    startTransition(async () => {
+      try {
+        const updated = await updateCreatorSources(ids, source);
+        setSelectedIds(new Set());
+        setBulkSource(source);
+        setNewSource("");
+        setNotice(`${updated} creator${updated === 1 ? "" : "s"} updated to source “${source}”.`);
       } catch (error) {
         setCreators(previous);
         setNotice(error instanceof Error ? error.message : "Could not update selected creators");
@@ -255,7 +278,7 @@ export function CollaborationsClient({ initialCreators, initialTemplates, loadEr
         <label>Direction <select value={sortDirection} onChange={(event) => setSortDirection(event.target.value as "asc" | "desc")}><option value="asc">Ascending</option><option value="desc">Descending</option></select></label>
         <span>{visible.length} shown</span>
       </div>
-      {selectedIds.size > 0 && <div className="collab-bulk"><strong>{selectedIds.size} selected</strong><label>Set status <select value={bulkStatus} onChange={(event) => setBulkStatus(event.target.value as Status)}>{statuses.map((status) => <option value={status} key={status}>{labels[status]}</option>)}</select></label><button className="collab-primary" disabled={isPending} onClick={applyBulkStatus}>Apply to selected</button><button onClick={() => setSelectedIds(new Set())}>Clear selection</button></div>}
+      {selectedIds.size > 0 && <div className="collab-bulk"><strong>{selectedIds.size} selected</strong><div className="collab-bulk-control"><label>Set status <select value={bulkStatus} onChange={(event) => setBulkStatus(event.target.value as Status)}>{statuses.map((status) => <option value={status} key={status}>{labels[status]}</option>)}</select></label><button className="collab-primary" disabled={isPending} onClick={applyBulkStatus}>Apply status</button></div><div className="collab-bulk-control"><label>Set source <select value={bulkSource} onChange={(event) => { setBulkSource(event.target.value); if (event.target.value !== "__new__") setNewSource(""); }}>{sourceOptions.map((source) => <option value={source} key={source}>{source}</option>)}<option value="__new__">+ Add new source</option></select></label>{bulkSource === "__new__" && <label>New source<input value={newSource} maxLength={100} onChange={(event) => setNewSource(event.target.value)} placeholder="Enter source name" autoFocus /></label>}<button className="collab-primary" disabled={isPending || (bulkSource === "__new__" && !newSource.trim())} onClick={applyBulkSource}>Apply source</button></div><button onClick={() => setSelectedIds(new Set())}>Clear selection</button></div>}
 
       <div className="collab-table-wrap">
         <div className="collab-table collab-head"><label className="collab-check"><input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label="Select all visible creators" /></label><span>Creator</span><span>Fit</span><span>DMs</span><span>Notes</span><span>Source</span><span>Status &amp; Action</span></div>

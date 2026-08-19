@@ -20,7 +20,7 @@ export async function GET(request: Request) {
     `client_id=${encodeURIComponent(appId)}`,
     `redirect_uri=${redirectUri}`,
     "response_type=code",
-    `scope=${encodeURIComponent("instagram_business_basic,instagram_business_manage_insights")}`,
+    `scope=${encodeURIComponent("instagram_business_basic,instagram_business_manage_insights,instagram_business_manage_messages")}`,
     `state=${encodeURIComponent(state)}`,
   ].join("&");
   return Response.redirect(authorize);

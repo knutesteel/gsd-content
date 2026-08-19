@@ -131,6 +131,84 @@ async function getMediaMetrics(token: string, mediaId: string) {
   }
 }
 
+type InstagramMessage = {
+  id?: string;
+  created_time?: string;
+  from?: { id?: string; username?: string };
+};
+
+type InstagramConversation = {
+  id: string;
+  participants?: { data?: Array<{ id?: string; username?: string }> };
+};
+
+function normalizedUsername(value: string | null | undefined) {
+  return (value ?? "").trim().replace(/^@/, "").toLowerCase();
+}
+
+async function getAllPages<T>(firstPath: string, token: string, params: Record<string, string> = {}) {
+  const rows: T[] = [];
+  let next: string | null = firstPath;
+  let first = true;
+  while (next) {
+    const page: { data?: T[]; paging?: { next?: string } } = await metaGet(next, token, first ? params : {});
+    rows.push(...(page.data ?? []));
+    next = page.paging?.next ?? null;
+    first = false;
+  }
+  return rows;
+}
+
+async function syncCreatorDmCounts(db: SupabaseClient<any>, connection: InstagramConnection, token: string, profile: any) {
+  const conversations = await getAllPages<InstagramConversation>("me/conversations", token, {
+    platform: "instagram",
+    fields: "id,participants",
+    limit: "100",
+  });
+  const ownUsername = normalizedUsername(profile.username ?? connection.instagram_username);
+  const ownIds = new Set([profile.id, profile.user_id, connection.instagram_user_id].filter(Boolean).map(String));
+  const counts = new Map<string, { sent: number; received: number; lastSent: string | null; lastReceived: string | null }>();
+
+  for (const conversation of conversations) {
+    const participant = conversation.participants?.data?.find((item) => normalizedUsername(item.username) !== ownUsername);
+    const username = normalizedUsername(participant?.username);
+    if (!username) continue;
+    const messages = await getAllPages<InstagramMessage>(`${conversation.id}/messages`, token, {
+      fields: "id,created_time,from",
+      limit: "100",
+    });
+    const current = counts.get(username) ?? { sent: 0, received: 0, lastSent: null, lastReceived: null };
+    for (const message of messages) {
+      const sent = normalizedUsername(message.from?.username) === ownUsername || ownIds.has(String(message.from?.id ?? ""));
+      if (sent) {
+        current.sent += 1;
+        if (message.created_time && (!current.lastSent || message.created_time > current.lastSent)) current.lastSent = message.created_time;
+      } else {
+        current.received += 1;
+        if (message.created_time && (!current.lastReceived || message.created_time > current.lastReceived)) current.lastReceived = message.created_time;
+      }
+    }
+    counts.set(username, current);
+  }
+
+  const { data: creators, error: creatorsError } = await db.from("creator_partnerships")
+    .select("id,instagram_handle")
+    .eq("owner_id", connection.owner_id);
+  if (creatorsError) throw creatorsError;
+  for (const creator of creators ?? []) {
+    const values = counts.get(normalizedUsername(creator.instagram_handle)) ?? { sent: 0, received: 0, lastSent: null, lastReceived: null };
+    const { error } = await db.from("creator_partnerships").update({
+      dm_sent_count: values.sent,
+      dm_received_count: values.received,
+      last_dm_sent_at: values.lastSent,
+      last_dm_received_at: values.lastReceived,
+      updated_at: new Date().toISOString(),
+    }).eq("id", creator.id).eq("owner_id", connection.owner_id);
+    if (error) throw error;
+  }
+  return conversations.length;
+}
+
 async function mapInBatches<T, R>(values: T[], size: number, work: (value: T) => Promise<R>) {
   const results: R[] = [];
   for (let index = 0; index < values.length; index += size) results.push(...await Promise.all(values.slice(index, index + size).map(work)));
@@ -151,6 +229,10 @@ export async function syncInstagramConnection(db: SupabaseClient<any>, connectio
       getAccountMetrics(token),
     ]);
     const media = await getMedia(token);
+    const grantedScopes = (connection as InstagramConnection & { granted_scopes?: string[] }).granted_scopes ?? [];
+    const conversationsSynced = grantedScopes.includes("instagram_business_manage_messages")
+      ? await syncCreatorDmCounts(db, connection, token, profile)
+      : 0;
     const mediaWithInsights = await mapInBatches(media, 5, async item => ({ item, insights: await getMediaMetrics(token, item.id) }));
     const snapshotDate = new Date().toISOString().slice(0, 10);
     const followsMetric = account.values.follows_and_unfollows ?? 0;
@@ -206,7 +288,7 @@ export async function syncInstagramConnection(db: SupabaseClient<any>, connectio
       if (snapshotError) throw snapshotError;
     }
     await db.from("instagram_sync_runs").update({ status: "succeeded", media_synced: mediaWithInsights.length, completed_at: new Date().toISOString() }).eq("id", run.id);
-    return { username: profile.username as string, followers: profile.followers_count as number, mediaSynced: mediaWithInsights.length };
+    return { username: profile.username as string, followers: profile.followers_count as number, mediaSynced: mediaWithInsights.length, conversationsSynced };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Instagram sync failed";
     await Promise.all([

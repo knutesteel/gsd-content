@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { createDmTemplate, markCreatorMessagesRead, recordCreatorDmSent, updateCreatorFollowState, updateCreatorName, updateCreatorStatus } from "./actions";
+import { createDmTemplate, markCreatorMessagesRead, recordCreatorDmSent, updateCreatorFollowState, updateCreatorName, updateCreatorStatus, updateCreatorStatuses } from "./actions";
 
 type Status = "new" | "contacted" | "accepted" | "rejected" | "disqualified";
 type Creator = {
@@ -9,9 +9,21 @@ type Creator = {
   instagram_handle: string; description: string; followers: number; engagement_rate: number;
   fit_rationale: string; notes: string; source: string; status: Status; is_following: boolean; followed_at: string | null;
   dm_sent_count: number; dm_received_count: number; unread_dm_count: number;
-  last_dm_sent_at: string | null; last_dm_received_at: string | null; last_dm_read_at: string | null;
+  last_dm_sent_at: string | null; last_dm_received_at: string | null; last_dm_read_at: string | null; updated_at: string;
 };
 type Template = { id: number; name: string; body: string };
+type SortKey = "rank" | "creator_name" | "instagram_handle" | "description" | "followers" | "engagement_rate" | "fit_score" | "priority" | "fit_rationale" | "status" | "is_following" | "dm_sent_count" | "dm_received_count" | "unread_dm_count" | "notes" | "source" | "updated_at";
+const sortOptions: Array<[SortKey,string]> = [
+  ["rank","Rank"],["creator_name","Name"],["instagram_handle","Instagram handle"],["description","Description"],
+  ["followers","Followers"],["engagement_rate","Engagement rate"],["fit_score","Fit score"],["priority","Priority"],
+  ["fit_rationale","Fit rationale"],["status","Status"],["is_following","Following"],["dm_sent_count","DMs sent"],
+  ["dm_received_count","DMs received"],["unread_dm_count","Unread DMs"],["notes","Notes"],["source","Source"],["updated_at","Last updated"],
+];
+function compareValues(left: unknown, right: unknown) {
+  if (typeof left === "number" && typeof right === "number") return left - right;
+  if (typeof left === "boolean" && typeof right === "boolean") return Number(left) - Number(right);
+  return String(left ?? "").localeCompare(String(right ?? ""), undefined, { numeric: true, sensitivity: "base" });
+}
 const statuses: Status[] = ["new", "contacted", "accepted", "rejected", "disqualified"];
 const labels: Record<Status, string> = { new: "New", contacted: "Contacted", accepted: "Accepted", rejected: "Rejected", disqualified: "Disqualified" };
 
@@ -31,7 +43,10 @@ export function CollaborationsClient({ initialCreators, initialTemplates, loadEr
   const [templates, setTemplates] = useState(initialTemplates);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Status | "all">("all");
-  const [sort, setSort] = useState("rank");
+  const [sort, setSort] = useState<SortKey>("rank");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkStatus, setBulkStatus] = useState<Status>("contacted");
   const [composer, setComposer] = useState<Creator | null>(null);
   const [selected, setSelected] = useState<Creator | null>(null);
   const [editingName, setEditingName] = useState(false);
@@ -47,10 +62,45 @@ export function CollaborationsClient({ initialCreators, initialTemplates, loadEr
   const visible = useMemo(() => {
     const needle = query.toLowerCase().trim();
     return creators.filter((creator) => (filter === "all" || creator.status === filter) && (!needle || `${creator.creator_name} ${creator.instagram_handle} ${creator.description} ${creator.fit_rationale} ${creator.notes} ${creator.source}`.toLowerCase().includes(needle)))
-      .sort((a, b) => sort === "score" ? b.fit_score - a.fit_score : sort === "followers" ? b.followers - a.followers : a.rank - b.rank);
-  }, [creators, filter, query, sort]);
+      .sort((a, b) => compareValues(a[sort], b[sort]) * (sortDirection === "asc" ? 1 : -1));
+  }, [creators, filter, query, sort, sortDirection]);
 
   const counts = useMemo(() => Object.fromEntries(statuses.map((status) => [status, creators.filter((creator) => creator.status === status).length])) as Record<Status, number>, [creators]);
+  const allVisibleSelected = visible.length > 0 && visible.every((creator) => selectedIds.has(creator.id));
+
+  function toggleCreator(id: number) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAllVisible() {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (allVisibleSelected) visible.forEach((creator) => next.delete(creator.id));
+      else visible.forEach((creator) => next.add(creator.id));
+      return next;
+    });
+  }
+
+  function applyBulkStatus() {
+    const ids = [...selectedIds];
+    if (!ids.length) return;
+    const previous = creators;
+    setCreators((current) => current.map((creator) => selectedIds.has(creator.id) ? { ...creator, status: bulkStatus } : creator));
+    startTransition(async () => {
+      try {
+        const updated = await updateCreatorStatuses(ids, bulkStatus);
+        setSelectedIds(new Set());
+        setNotice(`${updated} creator${updated === 1 ? "" : "s"} updated to ${labels[bulkStatus]}.`);
+      } catch (error) {
+        setCreators(previous);
+        setNotice(error instanceof Error ? error.message : "Could not update selected creators");
+      }
+    });
+  }
   const activeTemplate = templates.find((template) => template.id === templateId);
   const message = composer ? (templateId === "custom" ? customMessage : mergeMessage(activeTemplate?.body ?? "", composer)) : "";
 
@@ -140,14 +190,17 @@ export function CollaborationsClient({ initialCreators, initialTemplates, loadEr
 
       <div className="collab-toolbar">
         <label><span className="sr-only">Search creators</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name, handle, audience, or rationale…" /></label>
-        <label>Sort <select value={sort} onChange={(event) => setSort(event.target.value)}><option value="rank">Best rank</option><option value="score">Fit score</option><option value="followers">Followers</option></select></label>
+        <label>Sort <select value={sort} onChange={(event) => setSort(event.target.value as SortKey)}>{sortOptions.map(([value,label]) => <option value={value} key={value}>{label}</option>)}</select></label>
+        <label>Direction <select value={sortDirection} onChange={(event) => setSortDirection(event.target.value as "asc" | "desc")}><option value="asc">Ascending</option><option value="desc">Descending</option></select></label>
         <span>{visible.length} shown</span>
       </div>
+      {selectedIds.size > 0 && <div className="collab-bulk"><strong>{selectedIds.size} selected</strong><label>Set status <select value={bulkStatus} onChange={(event) => setBulkStatus(event.target.value as Status)}>{statuses.map((status) => <option value={status} key={status}>{labels[status]}</option>)}</select></label><button className="collab-primary" disabled={isPending} onClick={applyBulkStatus}>Apply to selected</button><button onClick={() => setSelectedIds(new Set())}>Clear selection</button></div>}
 
       <div className="collab-table-wrap">
-        <div className="collab-table collab-head"><span>Creator</span><span>Fit</span><span>DMs</span><span>Notes</span><span>Source</span><span>Status &amp; Action</span></div>
+        <div className="collab-table collab-head"><label className="collab-check"><input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label="Select all visible creators" /></label><span>Creator</span><span>Fit</span><span>DMs</span><span>Notes</span><span>Source</span><span>Status &amp; Action</span></div>
         {visible.map((creator) => (
-          <article className="collab-table collab-row" key={creator.id} role="button" tabIndex={0} onClick={() => { setSelected(creator); setEditingName(false); setDraftName(creator.creator_name); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { setSelected(creator); setEditingName(false); setDraftName(creator.creator_name); } }}>
+          <article className="collab-table collab-row" data-selected={selectedIds.has(creator.id)} key={creator.id} role="button" tabIndex={0} onClick={() => { setSelected(creator); setEditingName(false); setDraftName(creator.creator_name); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { setSelected(creator); setEditingName(false); setDraftName(creator.creator_name); } }}>
+            <label className="collab-check" onClick={(event) => event.stopPropagation()}><input type="checkbox" checked={selectedIds.has(creator.id)} onChange={() => toggleCreator(creator.id)} aria-label={`Select ${displayName(creator)}`} /></label>
             <div className="collab-creator"><span className="collab-rank">{creator.rank}</span><div><div className="collab-name-line"><h2><a href={`https://www.instagram.com/${creator.instagram_handle.replace(/^@/, "")}/`} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>{displayName(creator)}</a></h2>{creator.is_following ? <span className="collab-row-followed">✓ Followed</span> : <button className="collab-row-follow" disabled={!creator.instagram_handle} onClick={(event) => { event.stopPropagation(); followCreator(creator); }}>Instagram Follow</button>}</div><a href={`https://www.instagram.com/${creator.instagram_handle.replace(/^@/, "")}/`} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>{creator.instagram_handle || "No handle listed"}</a><p>{creator.description}</p><small>{creator.fit_rationale}</small></div></div>
             <div><strong className="collab-score">{creator.fit_score}</strong><small>{creator.priority}</small></div>
             <div className="collab-dm-counts"><strong>Sent {creator.dm_sent_count}</strong><small>Rec’d {creator.dm_received_count}{creator.unread_dm_count > 0 && <sup className="collab-unread" aria-label={`${creator.unread_dm_count} unread messages`}>*</sup>}</small></div>

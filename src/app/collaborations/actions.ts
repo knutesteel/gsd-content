@@ -19,6 +19,47 @@ export async function updateCreatorStatus(id: number, status: string) {
   revalidatePath("/collaborations");
 }
 
+async function authenticatedCreator(id: number) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("You must be signed in");
+  const { data, error } = await (supabase as any).from("creator_partnerships")
+    .select("id, dm_sent_count")
+    .eq("id", id)
+    .eq("owner_id", user.id)
+    .single();
+  if (error) throw new Error(error.message);
+  return { supabase, user, creator: data as { id: number; dm_sent_count: number } };
+}
+
+export async function updateCreatorFollowState(id: number, isFollowing: boolean) {
+  const { supabase, user } = await authenticatedCreator(id);
+  const { error } = await (supabase as any).from("creator_partnerships")
+    .update({ is_following: isFollowing, followed_at: isFollowing ? new Date().toISOString() : null, updated_at: new Date().toISOString() })
+    .eq("id", id).eq("owner_id", user.id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/collaborations");
+}
+
+export async function recordCreatorDmSent(id: number) {
+  const { supabase, user, creator } = await authenticatedCreator(id);
+  const { error } = await (supabase as any).from("creator_partnerships")
+    .update({ dm_sent_count: creator.dm_sent_count + 1, status: "contacted", last_dm_sent_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("id", id).eq("owner_id", user.id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/collaborations");
+  return creator.dm_sent_count + 1;
+}
+
+export async function markCreatorMessagesRead(id: number) {
+  const { supabase, user } = await authenticatedCreator(id);
+  const { error } = await (supabase as any).from("creator_partnerships")
+    .update({ unread_dm_count: 0, last_dm_read_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("id", id).eq("owner_id", user.id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/collaborations");
+}
+
 export async function createDmTemplate(name: string, body: string) {
   const cleanName = name.trim();
   const cleanBody = body.trim();

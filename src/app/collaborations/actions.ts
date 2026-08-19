@@ -23,6 +23,26 @@ export async function updateCreatorStatuses(ids: number[], status: string) {
   return uniqueIds.length;
 }
 
+export async function updateCreatorSources(ids: number[], source: string) {
+  const uniqueIds = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
+  const cleanSource = source.trim();
+  if (!uniqueIds.length) throw new Error("Select at least one creator");
+  if (uniqueIds.length > 500) throw new Error("Too many creators selected");
+  if (!cleanSource) throw new Error("Source is required");
+  if (cleanSource.length > 100) throw new Error("Source must be 100 characters or fewer");
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("You must be signed in");
+  const { error } = await (supabase as any)
+    .from("creator_partnerships")
+    .update({ source: cleanSource, updated_at: new Date().toISOString() })
+    .in("id", uniqueIds)
+    .eq("owner_id", user.id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/collaborations");
+  return uniqueIds.length;
+}
+
 export async function updateCreatorStatus(id: number, status: string) {
   if (!statuses.includes(status as (typeof statuses)[number])) throw new Error("Invalid status");
   const supabase = await createClient();

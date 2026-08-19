@@ -5,6 +5,7 @@ const primaryLinks = [
   ["/", "News Articles"],
   ["/discover", "News Search"],
   ["/instagram-insights", "Instagram Insights"],
+  ["/collaborations", "Collaborations"],
   ["/content-plan", "Content Plan"],
   ["/online-sales", "Online Sales"],
 ];
@@ -22,35 +23,13 @@ export function AppHeader() {
       </Link>
       <nav>
         {primaryLinks.map(([href, label]) => (
-          <Link key={href} href={href}>
-            {label}
-          </Link>
+          <Link key={href} href={href}>{label}</Link>
         ))}
-        <a
-          className="external-plan-link"
-          href="https://gsd-retail-plan.knutesteel.chatgpt.site/"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Retail Plan
-        </a>
-        <a
-          className="external-plan-link"
-          href="https://podcast-outreach-command-center.knutesteel.chatgpt.site/"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Podcast Plan
-        </a>
+        <a className="external-plan-link" href="https://gsd-retail-plan.knutesteel.chatgpt.site/" target="_blank" rel="noopener noreferrer">Retail Plan</a>
+        <a className="external-plan-link" href="https://podcast-outreach-command-center.knutesteel.chatgpt.site/" target="_blank" rel="noopener noreferrer">Podcast Plan</a>
         <div className="nav-bottom">
-          {bottomLinks.map(([href, label]) => (
-            <Link key={href} href={href}>
-              {label}
-            </Link>
-          ))}
-          <form action={logout}>
-            <button>Sign Out</button>
-          </form>
+          {bottomLinks.map(([href, label]) => (<Link key={href} href={href}>{label}</Link>))}
+          <form action={logout}><button>Sign Out</button></form>
         </div>
       </nav>
     </header>

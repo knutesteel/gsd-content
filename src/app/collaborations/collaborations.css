@@ -9,7 +9,7 @@
 .collab-table{grid-template-columns:minmax(480px,2.4fr) minmax(85px,.45fr) minmax(105px,.55fr) minmax(280px,1.35fr) minmax(170px,.8fr);min-width:1320px}
 .collab-name-line h2 a{margin:0;color:#20201d;font-size:inherit;text-decoration:underline;text-decoration-color:#c7bba7;text-underline-offset:3px}
 .collab-name-line h2 a:hover{color:#a64018;text-decoration-color:#a64018}
-.collab-notes{display:-webkit-box;margin:0;overflow:hidden;color:#625e55;font-size:.78rem;line-height:1.4;-webkit-box-orient:vertical;-webkit-line-clamp:4}
+.collab-notes{width:100%;min-height:76px;margin:0;padding:9px 10px;border:1px solid transparent;background:transparent;color:#625e55;font-size:.78rem;line-height:1.4;resize:vertical}.collab-notes:hover,.collab-notes:focus{border-color:#c8bfad;background:#fffdf7;outline:none}.collab-detail-notes{margin:22px 0;padding:20px;border:1px solid #d2cabd;background:#fffdf7}.collab-detail-notes h3{margin:0 0 10px;font-size:.82rem;text-transform:uppercase}.collab-detail-notes textarea{width:100%;line-height:1.5}.collab-detail-notes>div{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:8px}.collab-detail-notes small{color:#746e63}
 .collab-row-actions{display:flex;gap:8px;align-items:stretch;flex-direction:column}
 .collab-row-actions .collab-status,.collab-row-actions .collab-dm{width:100%}
 

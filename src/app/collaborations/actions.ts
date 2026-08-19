@@ -90,6 +90,19 @@ export async function updateCreatorName(id: number, creatorName: string) {
   revalidatePath("/collaborations");
 }
 
+export async function updateCreatorNotes(id: number, notes: string) {
+  if (!Number.isInteger(id) || id <= 0) throw new Error("Invalid creator");
+  const cleanNotes = notes.trim();
+  if (cleanNotes.length > 5000) throw new Error("Notes must be 5,000 characters or fewer");
+  const { supabase, user } = await authenticatedCreator(id);
+  const { error } = await (supabase as any).from("creator_partnerships")
+    .update({ notes: cleanNotes, updated_at: new Date().toISOString() })
+    .eq("id", id).eq("owner_id", user.id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/collaborations");
+  return cleanNotes;
+}
+
 export async function recordCreatorDmSent(id: number) {
   const { supabase, user, creator } = await authenticatedCreator(id);
   const { error } = await (supabase as any).from("creator_partnerships")

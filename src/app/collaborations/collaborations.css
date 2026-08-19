@@ -6,3 +6,9 @@
 .collab-page{max-width:1700px}.collab-table{grid-template-columns:minmax(520px,2.8fr) minmax(85px,.45fr) minmax(105px,.55fr) minmax(145px,.7fr) minmax(160px,.75fr);min-width:1180px}.collab-name-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.collab-name-line h2{max-width:none;overflow:visible;white-space:normal}.collab-row-follow{min-height:28px;padding:4px 9px;border-color:#a64018;background:transparent;color:#a64018;font-size:.66rem;font-weight:900;text-transform:uppercase;white-space:nowrap}.collab-row-follow:hover{background:#a64018;color:#fff}.collab-row-followed{color:#26764d;font-size:.68rem;font-weight:900;text-transform:uppercase;white-space:nowrap}
 .collab-detail-name{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.collab-detail-name h2{margin-bottom:8px}.collab-detail-name button{padding:6px 9px;font-size:.7rem}.collab-name-editor{display:grid;grid-template-columns:1fr auto auto;gap:8px;margin:5px 48px 18px 0}.collab-name-editor input{min-width:0}.collab-name-editor button{white-space:nowrap}
 @media(max-width:700px){.collab-name-editor{grid-template-columns:1fr;margin-right:0}}
+.collab-table{grid-template-columns:minmax(480px,2.4fr) minmax(85px,.45fr) minmax(105px,.55fr) minmax(280px,1.35fr) minmax(170px,.8fr);min-width:1320px}
+.collab-name-line h2 a{margin:0;color:#20201d;font-size:inherit;text-decoration:underline;text-decoration-color:#c7bba7;text-underline-offset:3px}
+.collab-name-line h2 a:hover{color:#a64018;text-decoration-color:#a64018}
+.collab-notes{display:-webkit-box;margin:0;overflow:hidden;color:#625e55;font-size:.78rem;line-height:1.4;-webkit-box-orient:vertical;-webkit-line-clamp:4}
+.collab-row-actions{display:flex;gap:8px;align-items:stretch;flex-direction:column}
+.collab-row-actions .collab-status,.collab-row-actions .collab-dm{width:100%}

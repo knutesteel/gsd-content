@@ -9,15 +9,15 @@ type Creator = {
   instagram_handle: string; description: string; followers: number; engagement_rate: number;
   fit_rationale: string; notes: string; source: string; status: Status; is_following: boolean; followed_at: string | null;
   dm_sent_count: number; dm_received_count: number; unread_dm_count: number;
-  last_dm_sent_at: string | null; last_dm_received_at: string | null; last_dm_read_at: string | null; updated_at: string;
+  last_dm_sent_at: string | null; last_dm_received_at: string | null; last_dm_read_at: string | null; created_at: string; updated_at: string;
 };
 type Template = { id: number; name: string; body: string };
-type SortKey = "rank" | "creator_name" | "instagram_handle" | "description" | "followers" | "engagement_rate" | "fit_score" | "priority" | "fit_rationale" | "status" | "is_following" | "dm_sent_count" | "dm_received_count" | "unread_dm_count" | "notes" | "source" | "updated_at";
+type SortKey = "rank" | "creator_name" | "instagram_handle" | "description" | "followers" | "engagement_rate" | "fit_score" | "priority" | "fit_rationale" | "status" | "is_following" | "dm_sent_count" | "dm_received_count" | "unread_dm_count" | "notes" | "source" | "created_at" | "updated_at";
 const sortOptions: Array<[SortKey,string]> = [
   ["rank","Rank"],["creator_name","Name"],["instagram_handle","Instagram handle"],["description","Description"],
   ["followers","Followers"],["engagement_rate","Engagement rate"],["fit_score","Fit score"],["priority","Priority"],
   ["fit_rationale","Fit rationale"],["status","Status"],["is_following","Following"],["dm_sent_count","DMs sent"],
-  ["dm_received_count","DMs received"],["unread_dm_count","Unread DMs"],["notes","Notes"],["source","Source"],["updated_at","Last updated"],
+  ["dm_received_count","DMs received"],["unread_dm_count","Unread DMs"],["notes","Notes"],["source","Source"],["created_at","Date added"],["updated_at","Last updated"],
 ];
 function compareValues(left: unknown, right: unknown) {
   if (typeof left === "number" && typeof right === "number") return left - right;
@@ -86,6 +86,15 @@ export function CollaborationsClient({ initialCreators, initialTemplates, dmSync
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
+  }
+
+  function sortByColumn(key: SortKey) {
+    if (sort === key) setSortDirection((current) => current === "asc" ? "desc" : "asc");
+    else { setSort(key); setSortDirection("asc"); }
+  }
+
+  function sortLabel(key: SortKey, label: string) {
+    return `${label}${sort === key ? (sortDirection === "asc" ? " ↑" : " ↓") : ""}`;
   }
 
   function toggleAllVisible() {
@@ -301,7 +310,7 @@ export function CollaborationsClient({ initialCreators, initialTemplates, dmSync
       {selectedIds.size > 0 && <div className="collab-bulk"><strong>{selectedIds.size} selected</strong><div className="collab-bulk-control"><label>Set status <select value={bulkStatus} onChange={(event) => setBulkStatus(event.target.value as Status)}>{statuses.map((status) => <option value={status} key={status}>{labels[status]}</option>)}</select></label><button className="collab-primary" disabled={isPending} onClick={applyBulkStatus}>Apply status</button></div><div className="collab-bulk-control"><label>Set source <select value={bulkSource} onChange={(event) => { setBulkSource(event.target.value); if (event.target.value !== "__new__") setNewSource(""); }}>{sourceOptions.map((source) => <option value={source} key={source}>{source}</option>)}<option value="__new__">+ Add new source</option></select></label>{bulkSource === "__new__" && <label>New source<input value={newSource} maxLength={100} onChange={(event) => setNewSource(event.target.value)} placeholder="Enter source name" autoFocus /></label>}<button className="collab-primary" disabled={isPending || (bulkSource === "__new__" && !newSource.trim())} onClick={applyBulkSource}>Apply source</button></div><button onClick={() => setSelectedIds(new Set())}>Clear selection</button></div>}
 
       <div className="collab-table-wrap">
-        <div className="collab-table collab-head"><label className="collab-check"><input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label="Select all visible creators" /></label><span>Creator</span><span>Fit</span><span>DMs</span><span>Notes</span><span>Source</span><span>Status &amp; Action</span></div>
+        <div className="collab-table collab-head"><label className="collab-check"><input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label="Select all visible creators" /></label><button onClick={() => sortByColumn("creator_name")}>{sortLabel("creator_name", "Creator")}</button><button onClick={() => sortByColumn("fit_score")}>{sortLabel("fit_score", "Fit")}</button><div className="collab-head-dual"><button onClick={() => sortByColumn("dm_received_count")}>{sortLabel("dm_received_count", "Rec’d")}</button><button onClick={() => sortByColumn("dm_sent_count")}>{sortLabel("dm_sent_count", "Sent")}</button></div><button onClick={() => sortByColumn("notes")}>{sortLabel("notes", "Notes")}</button><button onClick={() => sortByColumn("source")}>{sortLabel("source", "Source")}</button><button onClick={() => sortByColumn("created_at")}>{sortLabel("created_at", "Date Added")}</button><button onClick={() => sortByColumn("status")}>{sortLabel("status", "Status & Action")}</button></div>
         {visible.map((creator) => (
           <article className="collab-table collab-row" data-selected={selectedIds.has(creator.id)} key={creator.id} role="button" tabIndex={0} onClick={() => { setSelected(creator); setEditingName(false); setDraftName(creator.creator_name); setDraftNotes(creator.notes); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { setSelected(creator); setEditingName(false); setDraftName(creator.creator_name); setDraftNotes(creator.notes); } }}>
             <label className="collab-check" onClick={(event) => event.stopPropagation()}><input type="checkbox" checked={selectedIds.has(creator.id)} onChange={() => toggleCreator(creator.id)} aria-label={`Select ${displayName(creator)}`} /></label>
@@ -310,6 +319,7 @@ export function CollaborationsClient({ initialCreators, initialTemplates, dmSync
             <div className="collab-dm-counts"><a href={`https://ig.me/m/${creator.instagram_handle.replace(/^@/, "")}`} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}><strong>Rec’d {creator.dm_received_count}{creator.unread_dm_count > 0 && <sup className="collab-unread" aria-label={`${creator.unread_dm_count} unread messages`}>*</sup>}</strong></a><a href={`https://ig.me/m/${creator.instagram_handle.replace(/^@/, "")}`} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}><small>Sent {creator.dm_sent_count}</small></a></div>
             <textarea className="collab-notes" rows={3} maxLength={5000} value={creator.notes} placeholder="Add notes…" aria-label={`Notes for ${displayName(creator)}`} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()} onChange={(event) => changeNotes(creator.id, event.target.value)} onBlur={(event) => saveCreatorNotes(creator.id, event.target.value)} />
             <span className="collab-source">{creator.source || "SocialCat"}</span>
+            <time className="collab-date-added" dateTime={creator.created_at}>{new Date(creator.created_at).toLocaleDateString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric" })}</time>
             <div className="collab-row-actions"><select className={`collab-status status-${creator.status}`} value={creator.status} disabled={isPending} onClick={(event) => event.stopPropagation()} onChange={(event) => setStatus(creator.id, event.target.value as Status)}>{statuses.map((status) => <option value={status} key={status}>{labels[status]}</option>)}</select><button className="collab-dm" onClick={(event) => { event.stopPropagation(); openComposer(creator); }}>Send Instagram DM</button></div>
           </article>
         ))}

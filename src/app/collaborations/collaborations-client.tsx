@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { createDmTemplate, markCreatorMessagesRead, recordCreatorDmSent, updateCreatorFollowState, updateCreatorName, updateCreatorNotes, updateCreatorSources, updateCreatorStatus, updateCreatorStatuses, updateDmTemplate } from "./actions";
 
-type Status = "new" | "contacted" | "accepted" | "rejected" | "disqualified";
+type Status = "new" | "contacted" | "in_process" | "active" | "rejected" | "disqualified";
 type Creator = {
   id: number; rank: number; fit_score: number; priority: string; creator_name: string;
   instagram_handle: string; description: string; followers: number; engagement_rate: number;
@@ -24,8 +24,8 @@ function compareValues(left: unknown, right: unknown) {
   if (typeof left === "boolean" && typeof right === "boolean") return Number(left) - Number(right);
   return String(left ?? "").localeCompare(String(right ?? ""), undefined, { numeric: true, sensitivity: "base" });
 }
-const statuses: Status[] = ["new", "contacted", "accepted", "rejected", "disqualified"];
-const labels: Record<Status, string> = { new: "New", contacted: "Contacted", accepted: "Accepted", rejected: "Rejected", disqualified: "Disqualified" };
+const statuses: Status[] = ["new", "contacted", "in_process", "active", "rejected", "disqualified"];
+const labels: Record<Status, string> = { new: "New", contacted: "Contacted", in_process: "In Process", active: "Active", rejected: "Rejected", disqualified: "Disqualified" };
 
 function formatFollowers(value: number) {
   return new Intl.NumberFormat("en", { notation: value >= 1000 ? "compact" : "standard", maximumFractionDigits: 1 }).format(value);

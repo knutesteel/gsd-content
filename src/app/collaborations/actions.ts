@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
-const statuses = ["new", "contacted", "accepted", "rejected", "disqualified"] as const;
+const statuses = ["new", "contacted", "in_process", "active", "rejected", "disqualified"] as const;
 
 export async function updateCreatorStatuses(ids: number[], status: string) {
   const uniqueIds = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];

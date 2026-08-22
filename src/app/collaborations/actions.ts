@@ -103,16 +103,6 @@ export async function updateCreatorNotes(id: number, notes: string) {
   return cleanNotes;
 }
 
-export async function recordCreatorDmSent(id: number) {
-  const { supabase, user, creator } = await authenticatedCreator(id);
-  const { error } = await (supabase as any).from("creator_partnerships")
-    .update({ status: "contacted", updated_at: new Date().toISOString() })
-    .eq("id", id).eq("owner_id", user.id);
-  if (error) throw new Error(error.message);
-  revalidatePath("/collaborations");
-  return creator.dm_sent_count;
-}
-
 export async function markCreatorMessagesRead(id: number) {
   const { supabase, user } = await authenticatedCreator(id);
   const { error } = await (supabase as any).from("creator_partnerships")

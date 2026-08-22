@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { createDmTemplate, markCreatorMessagesRead, recordCreatorDmSent, updateCreatorFollowState, updateCreatorName, updateCreatorNotes, updateCreatorSources, updateCreatorStatus, updateCreatorStatuses, updateDmTemplate } from "./actions";
+import { createDmTemplate, markCreatorMessagesRead, updateCreatorFollowState, updateCreatorName, updateCreatorNotes, updateCreatorSources, updateCreatorStatus, updateCreatorStatuses, updateDmTemplate } from "./actions";
 
 type Status = "new" | "contacted" | "in_process" | "active" | "rejected" | "disqualified";
 type Creator = {
@@ -210,13 +210,6 @@ export function CollaborationsClient({ initialCreators, initialTemplates, dmSync
   async function sendMessage() {
     if (!composer || !dmMessage.trim()) return;
     await navigator.clipboard.writeText(dmMessage);
-    const creatorId = composer.id;
-    setCreators((current) => current.map((creator) => creator.id === creatorId ? { ...creator, status: "contacted" } : creator));
-    setSelected((current) => current?.id === creatorId ? { ...current, status: "contacted" } : current);
-    startTransition(async () => {
-      try { await recordCreatorDmSent(creatorId); }
-      catch (error) { setNotice(error instanceof Error ? error.message : "Could not record the message"); }
-    });
     window.open(`https://www.instagram.com/${composer.instagram_handle.replace(/^@/, "")}/`, "_blank", "noopener,noreferrer");
     setNotice("Message copied. Paste it into Instagram to send.");
     setComposer(null);

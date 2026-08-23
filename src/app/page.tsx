@@ -54,7 +54,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
   };
   const visibleItemIds = items.map((item) => item.id);
   const { data: imageAssets } = visibleItemIds.length
-    ? await supabase.from("assets").select("id,content_item_id,storage_path,slide_number,kind").in("content_item_id", visibleItemIds).in("kind", ["image", "carousel_slide"]).order("slide_number", { ascending: true })
+    ? await supabase.from("assets").select("id,content_item_id,storage_path,slide_number,kind").in("content_item_id", visibleItemIds).in("kind", ["image", "carousel_slide", "thumbnail"]).order("slide_number", { ascending: true })
     : { data: [] };
   const imagePaths = (imageAssets ?? []).map((asset) => asset.storage_path);
   const { data: signedImages } = imagePaths.length

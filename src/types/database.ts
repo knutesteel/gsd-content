@@ -1,6 +1,6 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
-export type ContentStatus = "new" | "auto_added" | "generated" | "posted" | "archived";
+export type ContentStatus = "new" | "auto_added" | "generated" | "images_generated" | "posted" | "archived";
 
 export type ContentItem = {
   id: string; owner_id: string; identifier: string; parent_id: string | null; variation_number: number | null;

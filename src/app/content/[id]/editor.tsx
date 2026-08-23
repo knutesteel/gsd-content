@@ -51,7 +51,7 @@ export function Editor({ item }: { item: ContentItem }) {
     <input type="hidden" name="id" value={item.id} /><input ref={versionRef} type="hidden" name="record_version" defaultValue={item.record_version} />
     <div className="form-grid">
       <label className="wide">Title<input name="title" defaultValue={item.title ?? ""} /></label>
-      <label>Status<select name="status" defaultValue={item.status}><option value="new">New</option><option value="auto_added">Auto-Added</option><option value="generated">Generated</option><option value="posted">Posted</option><option value="archived">Archived</option></select></label>
+      <label>Status<select name="status" defaultValue={item.status}><option value="new">New</option><option value="auto_added">Auto-Added</option><option value="generated">Prompt Generated</option><option value="images_generated">Images Generated</option><option value="posted">Posted</option><option value="archived">Archived</option></select></label>
       <label>Type<select name="content_type" defaultValue={item.content_type ?? ""}>
         <option value="">Select type</option>
         <option value="Single Pane Cartoon">Single Pane Cartoon</option>

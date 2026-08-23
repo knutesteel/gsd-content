@@ -50,6 +50,12 @@ async function syncDriveImages(supabase:ReturnType<typeof createClient<Database>
   }
   const eventType=importExisting?"legacy_images_imported":updated>0?"drive_images_updated":"drive_images_attached";
   await supabase.from("activity_events").insert({owner_id:job.owner_id,content_item_id:contentId,event_type:eventType,details:{attached,updated,unchanged,identifier}});
+  const {data:contentItem}=await supabase.from("content_items").select("status,record_version").eq("id",contentId).eq("owner_id",job.owner_id).maybeSingle();
+  if(contentItem&&!["images_generated","posted","archived"].includes(contentItem.status)){
+    const changedAt=new Date().toISOString();
+    const {error:statusError}=await supabase.from("content_items").update({status:"images_generated",record_version:contentItem.record_version+1,updated_at:changedAt}).eq("id",contentId).eq("owner_id",job.owner_id).eq("record_version",contentItem.record_version);
+    if(!statusError)await supabase.from("status_history").insert({owner_id:job.owner_id,content_item_id:contentId,from_status:contentItem.status,to_status:"images_generated",reason:importExisting?"Existing images imported from Drive":"Images attached from Drive"});
+  }
   await supabase.from("scheduled_jobs").update({status:"succeeded",result:{attached,updated,unchanged,matched:files.length},completed_at:new Date().toISOString()}).eq("id",job.id);return {result:updated>0?"updated":"attached",count:attached+updated};
 }
 

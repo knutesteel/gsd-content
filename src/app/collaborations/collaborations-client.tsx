@@ -97,6 +97,14 @@ export function CollaborationsClient({ initialCreators, initialTemplates, dmSync
     return `${label}${sort === key ? (sortDirection === "asc" ? " ↑" : " ↓") : ""}`;
   }
 
+  function filterByStatus(status: Status | "all") {
+    setFilter(status);
+    if (status === "contacted") {
+      setSort("updated_at");
+      setSortDirection("desc");
+    }
+  }
+
   function toggleAllVisible() {
     setSelectedIds((current) => {
       const next = new Set(current);
@@ -290,8 +298,8 @@ export function CollaborationsClient({ initialCreators, initialTemplates, dmSync
       {notice && <button className="collab-notice" onClick={() => setNotice("")}>{notice} ×</button>}
 
       <div className="collab-metrics">
-        <button data-active={filter === "all"} onClick={() => setFilter("all")}><span>All creators</span><strong>{creators.length}</strong></button>
-        {statuses.map((status) => <button key={status} data-active={filter === status} onClick={() => setFilter(status)}><span>{labels[status]}</span><strong>{counts[status]}</strong></button>)}
+        <button data-active={filter === "all"} onClick={() => filterByStatus("all")}><span>All creators</span><strong>{creators.length}</strong></button>
+        {statuses.map((status) => <button key={status} data-active={filter === status} onClick={() => filterByStatus(status)}><span>{labels[status]}</span><strong>{counts[status]}</strong></button>)}
       </div>
 
       <div className="collab-toolbar">

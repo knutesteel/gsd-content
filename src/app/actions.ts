@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { ContentStatus, Json } from "@/types/database";
 
 type ActionResult = { ok: boolean; message: string; version?: number };
-const statuses = new Set<ContentStatus>(["new", "auto_added", "generated", "posted", "archived"]);
+const statuses = new Set<ContentStatus>(["new", "auto_added", "generated", "images_generated", "posted", "archived"]);
 const contentTypes = new Set(["Single Pane Cartoon", "Multi-pane Cartoon", "Carousel (seperate images)"]);
 
 function textValue(form: FormData, key: string) { return String(form.get(key) ?? "").trim(); }

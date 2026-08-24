@@ -41,3 +41,14 @@
 .profile-table{margin-top:20px;border:1px solid #d2cabd;overflow-x:auto}.profile-table-row{display:grid;grid-template-columns:minmax(170px,1fr) minmax(100px,.55fr) minmax(320px,2fr) minmax(135px,.8fr) minmax(260px,1.35fr);gap:16px;align-items:center;min-width:1100px;padding:14px 16px;border-top:1px solid #ddd4c7}.profile-table-row:first-child{border-top:0}.profile-table-head{background:#eee7da;color:#746e63;font-size:.72rem;font-weight:900;text-transform:uppercase}.profile-table-head>a{text-decoration:none}.profile-table-row>span{color:#625e55;line-height:1.4}.profile-table-row>span:nth-child(2){text-align:right}.profile-table-row form{display:grid;grid-template-columns:minmax(145px,1fr) auto;gap:8px}.profile-table-row form input{display:none}.profile-table-row form button{white-space:nowrap}
 
 .detail-navigation .nav-disabled{padding:10px 14px;border:1px solid #d2cabd;border-radius:6px;color:#9b9488;background:#eee9df}.detail-navigation>a{padding:10px 14px;border:1px solid #aaa190;border-radius:6px;background:#f9f5eb;text-decoration:none;font-weight:750}
+
+
+.image-lightbox .lightbox-content{min-height:0}
+.image-lightbox .lightbox-image{flex:1;min-height:180px;height:auto}
+.image-revision-form{width:min(820px,100%);padding:14px;border:1px solid rgba(255,255,255,.28);border-radius:8px;background:rgba(32,32,29,.96);color:#fff}
+.image-revision-form label{display:block;margin-bottom:8px;font-size:.82rem;font-weight:850}
+.image-revision-form>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:stretch}
+.image-revision-form textarea{min-height:64px;max-height:150px}
+.image-revision-form button{white-space:nowrap}
+.image-revision-form small{display:block;margin-top:7px;color:#d8d0c3;line-height:1.35}
+@media(max-width:700px){.image-lightbox{grid-template-columns:38px minmax(0,1fr) 38px}.lightbox-content{padding-top:48px}.image-revision-form{padding:10px}.image-revision-form>div{grid-template-columns:1fr}.image-revision-form textarea{min-height:72px}.image-revision-form button{width:100%}}

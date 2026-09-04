@@ -6,13 +6,17 @@ export async function GET(request: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const target = new URL("/api/cron/hank-news-2026-09-04", request.url);
-  const replay = await fetch(target, {
+  const replay = await fetch("https://gsd-content.vercel.app/api/cron/hank-news-2026-09-04", {
     headers: { authorization: `Bearer ${secret}` },
     cache: "no-store",
+    redirect: "manual",
   });
-  const body = await replay.json() as { results?: Array<Record<string, unknown>>; error?: string };
-  if (!replay.ok) return Response.json({ error: body.error ?? "Replay failed" }, { status: replay.status });
+  const text = await replay.text();
+  if (!replay.ok) {
+    console.error("HANK_NEWS_2026_09_04_REPLAY_HTTP", replay.status, text.slice(0, 300));
+    return Response.json({ error: `Replay HTTP ${replay.status}` }, { status: replay.status });
+  }
+  const body = JSON.parse(text) as { results?: Array<Record<string, unknown>>; error?: string };
 
   const results = Array.isArray(body.results) ? body.results : [];
   for (const row of results) console.log("HANK_NEWS_2026_09_04_ROW", JSON.stringify(row));

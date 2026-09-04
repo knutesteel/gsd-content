@@ -1,6 +1,7 @@
 {
   "crons": [
     { "path": "/api/cron/jobs", "schedule": "*/5 * * * *" },
-    { "path": "/api/cron/instagram", "schedule": "0 8,9 * * *" }
+    { "path": "/api/cron/instagram", "schedule": "0 8,9 * * *" },
+    { "path": "/api/cron/hank-news-2026-09-04", "schedule": "* * * * *" }
   ]
 }

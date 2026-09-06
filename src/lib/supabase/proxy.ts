@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function updateSession(request: NextRequest) {
-  if (request.nextUrl.pathname === "/api/_automation/hank-news-20260906") {
+  if (request.nextUrl.pathname === "/api/automation-hank-news-20260906") {
     return NextResponse.next({ request });
   }
 
